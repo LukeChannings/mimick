@@ -287,7 +287,7 @@ box.mimick-tag-chip > button.mimick-tag-remove {
     padding: 0;
     border-radius: 0 999px 999px 0;
     border-left: 1px solid alpha(@accent_bg_color, 0.35);
-    -gtk-icon-size: 14px;
+    -gtk-icon-size: 16px;
 }
 
 box.mimick-tag-chip > button.mimick-tag-name:hover {

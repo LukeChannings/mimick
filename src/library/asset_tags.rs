@@ -142,6 +142,8 @@ impl TagSection {
         remove_btn.connect_clicked(move |_| section.remove_tag(removed.clone()));
         let chip = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
+            // The FlowBox hands spare row width to its children; keep the pill tight.
+            .halign(gtk::Align::Start)
             .css_classes(["mimick-tag-chip"])
             .build();
         chip.append(&name_btn);
