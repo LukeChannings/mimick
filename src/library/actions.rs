@@ -333,6 +333,7 @@ mod tests {
             thumbhash: None,
             width: 0,
             height: 0,
+            is_favorite: false,
         })
     }
 

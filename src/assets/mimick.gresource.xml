@@ -22,5 +22,11 @@
     <file alias="scalable/actions/mimick-library-symbolic.svg"
           compressed="true"
           preprocess="xml-stripblanks">scalable/actions/mimick-library-symbolic.svg</file>
+    <file alias="scalable/actions/mimick-heart-filled-symbolic.svg"
+          compressed="true"
+          preprocess="xml-stripblanks">scalable/actions/mimick-heart-filled-symbolic.svg</file>
+    <file alias="scalable/actions/mimick-heart-outline-symbolic.svg"
+          compressed="true"
+          preprocess="xml-stripblanks">scalable/actions/mimick-heart-outline-symbolic.svg</file>
   </gresource>
 </gresources>

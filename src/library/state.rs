@@ -57,6 +57,8 @@ pub enum LibrarySource {
     },
     /// Assets in the Immich trash, restorable until the server's retention period ends.
     Trash,
+    /// Assets marked as favorites.
+    Favorites,
 }
 
 impl LibrarySource {
@@ -333,6 +335,7 @@ mod tests {
             height: Some(10),
             checksum: None,
             exif_info: None,
+            is_favorite: false,
         }
     }
 

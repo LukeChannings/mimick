@@ -109,6 +109,7 @@ Each watched directory operates with isolated logical constraints:
 - **Media Lightbox:** Download originals and open full-resolution previews in the lightbox.
 - **Manage Assets:** Edit an asset's description, date taken, and favorite flag, or move it to the Immich trash (right-click, lightbox button, or **Delete**).
 - **Tags:** View, add, create, and remove tags in the lightbox details pane; click a tag or use the Tag search filter to find tagged assets.
+- **Favorites:** A heart in the lightbox (or **F**, the right-click menu, or Edit Info) marks favorites instantly; favorited thumbnails show a small heart, and the **Favorites** sidebar entry lists them.
 - **Server About:** Click the server row in the library sidebar for the Immich version, component versions (ExifTool, Node.js, FFmpeg, …), source/build links, and the server's version history.
 - **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
 - **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).

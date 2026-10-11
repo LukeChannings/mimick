@@ -13,6 +13,7 @@ use crate::api_client::{AssetDetails, AssetUpdate};
 
 use super::LibraryWindowUi;
 use super::context_menu::show_alert_dialog;
+use super::favorites::{apply_saved_favorite, drop_from_favorites_view, heart_icon};
 
 /// Format shown in and accepted by the "Date taken" field (local time).
 const DATE_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
@@ -98,7 +99,24 @@ struct EditForm {
     group: libadwaita::PreferencesGroup,
     description_row: libadwaita::EntryRow,
     date_row: libadwaita::EntryRow,
-    favorite_row: libadwaita::SwitchRow,
+    favorite_button: gtk::ToggleButton,
+}
+
+/// "Favorite" row with a heart toggle (filled when on); clicking the row toggles it too.
+fn favorite_row(favorite: bool) -> (libadwaita::ActionRow, gtk::ToggleButton) {
+    let button = gtk::ToggleButton::builder()
+        .icon_name(heart_icon(favorite))
+        .active(favorite)
+        .valign(gtk::Align::Center)
+        .css_classes(["flat", "circular"])
+        .build();
+    button.connect_toggled(|button| button.set_icon_name(heart_icon(button.is_active())));
+    let row = libadwaita::ActionRow::builder()
+        .title("Favorite")
+        .activatable_widget(&button)
+        .build();
+    row.add_suffix(&button);
+    (row, button)
 }
 
 impl EditForm {
@@ -111,10 +129,7 @@ impl EditForm {
             .title("Date taken (YYYY-MM-DD HH:MM:SS)")
             .text(&original.date_text)
             .build();
-        let favorite_row = libadwaita::SwitchRow::builder()
-            .title("Favorite")
-            .active(original.favorite)
-            .build();
+        let (favorite_row, favorite_button) = favorite_row(original.favorite);
         let group = libadwaita::PreferencesGroup::builder()
             .description(filename)
             .build();
@@ -125,7 +140,7 @@ impl EditForm {
             group,
             description_row,
             date_row,
-            favorite_row,
+            favorite_button,
         }
     }
 
@@ -133,7 +148,7 @@ impl EditForm {
         EditValues {
             description: self.description_row.text().to_string(),
             date_text: self.date_row.text().to_string(),
-            favorite: self.favorite_row.is_active(),
+            favorite: self.favorite_button.is_active(),
         }
     }
 }
@@ -241,6 +256,12 @@ fn save_update(
         match ui.ctx.api_client.update_asset(&asset_id, &update).await {
             Ok(()) => {
                 dialog.close();
+                if let Some(favorite) = update.is_favorite {
+                    apply_saved_favorite(&ui, &asset_id, favorite);
+                    if !favorite {
+                        drop_from_favorites_view(&ui, &asset_id);
+                    }
+                }
                 on_saved(update.date_time_original.is_some());
             }
             Err(err) => {

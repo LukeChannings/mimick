@@ -61,6 +61,10 @@ mod imp {
         /// Native pixel height of the asset; 0 = unknown.
         #[property(get, set)]
         height: Cell<u32>,
+
+        /// Favorite flag from Immich; drives the heart badge and heart buttons.
+        #[property(get, set)]
+        is_favorite: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -90,6 +94,7 @@ pub struct AssetInit<'a> {
     pub thumbhash: Option<&'a str>,
     pub width: u32,
     pub height: u32,
+    pub is_favorite: bool,
 }
 
 impl AssetObject {
@@ -106,6 +111,7 @@ impl AssetObject {
             .property("remote-id", init.id)
             .property("width", init.width)
             .property("height", init.height)
+            .property("is-favorite", init.is_favorite)
             .build()
     }
 

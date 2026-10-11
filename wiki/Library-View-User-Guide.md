@@ -24,6 +24,7 @@ The window uses a sidebar + content split.
 - **Photos** — opens the timeline grid
 - **Search** — opens the search form above the grid
 - **Explore** — People, Places, Things
+- **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
 - **Albums** — album landing page
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
@@ -289,6 +290,15 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 
 ---
 
+## Favorites
+
+- The heart button in the lightbox action bar (or **F**) marks the current asset as a favorite; it fills in at once and saves to Immich in the background. If Immich refuses (for example, a key without `asset.update`), the heart reverts and an error is shown.
+- The right-click menu has **Add to Favorites** / **Remove from Favorites**, and **Edit Info…** has a heart toggle.
+- Favorited thumbnails show a small white heart in the bottom-right corner.
+- The **Favorites** sidebar entry lists every favorite. Removing a favorite there drops it from the list (the lightbox moves on to the next asset).
+
+---
+
 ## Trash
 
 The **Trash** sidebar entry lists everything in the Immich trash in the normal grid.
@@ -309,3 +319,4 @@ The **Trash** sidebar entry lists everything in the Immich trash in the normal g
 | **F9** | Toggle sidebar |
 | **Esc** | Exit selection mode |
 | **Delete** | Move the selection (grid) or the current asset (lightbox) to the trash; in the Trash view, delete permanently |
+| **F** | Toggle favorite for the current asset (lightbox) |

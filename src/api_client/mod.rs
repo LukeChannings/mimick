@@ -153,6 +153,9 @@ pub struct LibraryAsset {
     /// EXIF block; Immich keeps pixel dimensions here, not at the top level.
     #[serde(rename = "exifInfo", default)]
     pub exif_info: Option<ExifInfo>,
+    /// Whether the asset is marked as a favorite.
+    #[serde(rename = "isFavorite", default)]
+    pub is_favorite: bool,
 }
 
 /// Immich returns asset checksums as base64-encoded SHA1, while Mimick computes

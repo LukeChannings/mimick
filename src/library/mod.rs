@@ -43,6 +43,7 @@ pub mod albums_view;
 pub mod asset_model;
 pub mod asset_object;
 pub mod explore_view;
+mod favorites;
 pub mod local_exif;
 pub mod local_source;
 pub mod masonry;
@@ -1085,6 +1086,15 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
+        LibrarySource::Favorites => {
+            let filters = MetadataSearchFilters {
+                order,
+                is_favorite: Some(true),
+                ..MetadataSearchFilters::default()
+            };
+            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
+                .await
+        }
         LibrarySource::Trash => {
             let filters = MetadataSearchFilters {
                 order,
@@ -1281,6 +1291,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Explore => {
             select_fixed_row(&ui.sidebar.fixed_list, "explore");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::Favorites => {
+            select_fixed_row(&ui.sidebar.fixed_list, "favorites");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Trash => {
@@ -1541,6 +1555,7 @@ fn local_to_library_asset(local: LocalAsset) -> LibraryAsset {
         height: None,
         checksum: None,
         exif_info: None,
+        is_favorite: false,
     }
 }
 

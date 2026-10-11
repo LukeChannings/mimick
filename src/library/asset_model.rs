@@ -188,13 +188,7 @@ fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetOb
                 .as_deref()
                 .and_then(|hex| ctx.sync_index.local_path_for_checksum(hex));
             let sync_state = if local_match.is_some() { 2 } else { 0 };
-            let (exif_w, exif_h) = asset
-                .exif_info
-                .as_ref()
-                .map(|e| (e.exif_image_width, e.exif_image_height))
-                .unwrap_or((None, None));
-            let width = asset.width.filter(|v| *v > 0).or(exif_w).unwrap_or(0);
-            let height = asset.height.filter(|v| *v > 0).or(exif_h).unwrap_or(0);
+            let (width, height) = asset_dimensions(asset);
             let object = AssetObject::new(AssetInit {
                 id: &asset.id,
                 filename: &asset.filename,
@@ -205,6 +199,7 @@ fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetOb
                 thumbhash: asset.thumbhash.as_deref(),
                 width,
                 height,
+                is_favorite: asset.is_favorite,
             });
             if let Some(path) = local_match {
                 object.set_property("local-path", path);
@@ -212,4 +207,17 @@ fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetOb
             object
         })
         .collect()
+}
+
+/// Pixel size from the asset, falling back to EXIF (where Immich often keeps it); 0 = unknown.
+fn asset_dimensions(asset: &LibraryAsset) -> (u32, u32) {
+    let (exif_w, exif_h) = asset
+        .exif_info
+        .as_ref()
+        .map(|e| (e.exif_image_width, e.exif_image_height))
+        .unwrap_or((None, None));
+    (
+        asset.width.filter(|v| *v > 0).or(exif_w).unwrap_or(0),
+        asset.height.filter(|v| *v > 0).or(exif_h).unwrap_or(0),
+    )
 }

@@ -79,6 +79,12 @@ pub fn build_sidebar() -> SidebarParts {
         "albums",
     ));
     fixed_list.append(&action_row(
+        "Favorites",
+        "Photos and videos you've marked",
+        "mimick-heart-filled-symbolic",
+        "favorites",
+    ));
+    fixed_list.append(&action_row(
         "Trash",
         "Restore or permanently delete",
         "user-trash-symbolic",

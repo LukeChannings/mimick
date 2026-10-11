@@ -328,6 +328,7 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                 }
                 "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
                 "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
+                "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
                 "albums" => {
                     ui.album_link_row.set_visible(false);
                     if let Some(parent) = ui.album_link_row.parent() {
