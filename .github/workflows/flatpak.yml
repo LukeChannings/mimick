@@ -34,7 +34,7 @@ jobs:
         manifest: [dev.nicx.mimick.local.yml, dev.nicx.mimick.yml]
         variant:
           - arch: x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
           - arch: aarch64
             runner: ubuntu-24.04-arm
         exclude:
