@@ -11,6 +11,7 @@ use glib::clone;
 use gtk::prelude::*;
 use libadwaita::prelude::*;
 
+use crate::api_client::SharedLinkTarget;
 use crate::library::asset_object::AssetObject;
 
 use super::LOCAL_ID_PREFIX;
@@ -154,6 +155,29 @@ fn connect_delete_key(ui: Rc<LibraryWindowUi>) {
         }
     ));
     ui.grid.scrolled.add_controller(delete_key);
+}
+
+/// Selection-bar button: create one public link for every selected server asset.
+pub(super) fn connect_bulk_share_link(ui: Rc<LibraryWindowUi>, button: &gtk::Button) {
+    button.connect_clicked(move |_| {
+        let ids: Vec<String> = selected_items(&ui)
+            .iter()
+            .filter_map(TrashTarget::from_item)
+            .map(|target| target.remote_id)
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        let ui_after = ui.clone();
+        super::shared_link_dialog::present(
+            ui.clone(),
+            super::shared_link_dialog::LinkDialogMode::Create(SharedLinkTarget::Assets(ids)),
+            Rc::new(move || {
+                ui_after.grid.selection.unselect_all();
+                ui_after.select_toggle.set_active(false);
+            }),
+        );
+    });
 }
 
 pub(super) fn selection_count(selection: &gtk::MultiSelection) -> u32 {

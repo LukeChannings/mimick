@@ -27,6 +27,7 @@ The window uses a sidebar + content split.
 - **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
 - **Albums** — album landing page
 - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
+- **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
@@ -298,6 +299,18 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
   - **Shared with** lists everyone in the album. Change a person's role with the **Viewer / Editor** dropdown, or remove them with the trash button. The owner is shown but can't be changed.
   - **Add people** lists users on the server who aren't in the album yet; type to filter by name or email, then **Add** (they join as Viewer).
 - Every change is saved to Immich immediately. Requires `albumUser.create`, `albumUser.update`, `albumUser.delete`, and `user.read` (without `user.read`, the Add people list stays empty).
+
+---
+
+## Shared Links
+
+- Create a public link that anyone with the URL can open in a browser:
+  - **An album:** right-click its tile on the Albums or Shared Albums page and choose **Create Share Link…**.
+  - **A selection:** select assets, then click the share button in the selection bar.
+  - **One asset:** right-click it and choose **Create Share Link…**.
+- The dialog sets a **Description**, when the link **Expires** (Never, 1 hour, 1 day, 7 days, 30 days), an optional **Password**, and whether visitors can download originals, upload into the album (album links only), and see metadata. **Create** copies the URL to the clipboard.
+- The **Shared Links** sidebar entry lists every link with its album name or item count, description, expiry, and restrictions. Each row has **Copy link**, **Edit** (the same dialog; leave the password empty to keep it), and **Delete** (asks first).
+- The URL uses the server's **External domain** (Immich Administration → Settings → Server) when set, and otherwise the address Mimick is connected through. Requires `sharedLink.read`, `sharedLink.create`, `sharedLink.update`, and `sharedLink.delete`.
 
 ---
 

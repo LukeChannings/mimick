@@ -19,6 +19,7 @@ use crate::library::masonry::{GridViewParts, build_grid_view};
 use crate::library::search_view::{SearchViewParts, build_search_view};
 use crate::library::sidebar::{SidebarParts, build_sidebar};
 
+use super::shared_links_view::{SharedLinksView, build_shared_links_view};
 use super::trash_view::{self, TrashControls};
 use super::{LibraryWindowUi, build_drop_overlay, build_loading_view, build_status_view};
 
@@ -60,6 +61,7 @@ pub(super) struct BulkParts {
     pub delete: gtk::Button,
     pub download: gtk::Button,
     pub clear: gtk::Button,
+    pub share_link: gtk::Button,
     trash: TrashControls,
 }
 
@@ -69,6 +71,7 @@ pub(super) struct ContentParts {
     grid: GridViewParts,
     explore: ExploreViewParts,
     albums: AlbumsViewParts,
+    shared_links: SharedLinksView,
     search_view: SearchViewParts,
     controls: ControlsParts,
     banner: gtk::Label,
@@ -136,11 +139,14 @@ impl ContentParts {
         let explore = build_explore_view();
         let albums = build_albums_view();
         let (stack, error_label) = build_content_stack(&grid, &explore, &albums);
+        let shared_links = build_shared_links_view();
+        stack.add_named(&shared_links.root, Some("shared-links"));
         Self {
             sidebar: build_sidebar(),
             grid,
             explore,
             albums,
+            shared_links,
             search_view: build_search_view(),
             controls: build_controls(),
             banner: build_timeline_banner(),
@@ -186,6 +192,7 @@ impl LibraryWindowUi {
             grid: content.grid,
             explore: content.explore,
             albums: content.albums,
+            shared_links: content.shared_links,
             content_stack: content.stack,
             error_label: content.error_label,
             transfer_bar: content.transfer.bar,
@@ -446,8 +453,8 @@ fn build_album_link() -> AlbumLinkParts {
     }
 }
 
-fn build_bulk_bar() -> BulkParts {
-    let count_label = gtk::Label::builder().xalign(0.0).hexpand(true).build();
+/// Delete, download, clear, and share-link buttons for the selection bar.
+fn bulk_buttons() -> (gtk::Button, gtk::Button, gtk::Button, gtk::Button) {
     let delete = gtk::Button::builder()
         .icon_name("user-trash-symbolic")
         .tooltip_text("Delete selected")
@@ -462,6 +469,16 @@ fn build_bulk_bar() -> BulkParts {
         .tooltip_text("Clear selection")
         .css_classes(vec!["flat".to_string()])
         .build();
+    let share_link = gtk::Button::builder()
+        .icon_name("emblem-shared-symbolic")
+        .tooltip_text("Create share link for selected")
+        .build();
+    (delete, download, clear, share_link)
+}
+
+fn build_bulk_bar() -> BulkParts {
+    let count_label = gtk::Label::builder().xalign(0.0).hexpand(true).build();
+    let (delete, download, clear, share_link) = bulk_buttons();
     let inner = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(8)
@@ -471,10 +488,16 @@ fn build_bulk_bar() -> BulkParts {
         .margin_end(12)
         .css_classes(vec!["toolbar".to_string()])
         .build();
-    // Download and Move to trash are swapped for Restore / Delete Permanently in the Trash view.
-    let trash = trash_view::build_trash_controls(vec![delete.clone(), download.clone()]);
+    // Share, download, and Move to trash are swapped for Restore / Delete Permanently
+    // in the Trash view.
+    let trash = trash_view::build_trash_controls(vec![
+        delete.clone(),
+        download.clone(),
+        share_link.clone(),
+    ]);
     inner.append(&count_label);
     inner.append(&clear);
+    inner.append(&share_link);
     inner.append(&download);
     inner.append(&delete);
     inner.append(&trash.restore_selected);
@@ -490,6 +513,7 @@ fn build_bulk_bar() -> BulkParts {
         delete,
         download,
         clear,
+        share_link,
         trash,
     }
 }

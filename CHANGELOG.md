@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Trash view to the library sidebar: restore or permanently delete trashed items, or empty the trash (#229).
 - Added favorites: a heart button in the lightbox (or **F**), menu and Edit Info toggles, a heart badge on favorited thumbnails, and a Favorites sidebar entry.
 - Added a Shared Albums sidebar entry, and a Share dialog for your albums (add people, change Viewer/Editor roles, remove people).
+- Added shared links: create a public link from an album, a selection, or the right-click menu (description, expiry, password, download/upload/metadata options), and manage all links from the new Shared Links sidebar entry (copy, edit, delete).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed

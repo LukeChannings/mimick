@@ -14,8 +14,17 @@ use crate::api_client::{LibraryAlbum, ThumbnailSize};
 use crate::app_context::AppContext;
 
 pub type AlbumClick = Rc<dyn Fn(&str, String)>;
-/// Opens the sharing dialog for one of the user's own albums.
-pub type AlbumShare = Rc<dyn Fn(LibraryAlbum)>;
+/// Right-click actions on the user's own album tiles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlbumAction {
+    /// Manage which users the album is shared with.
+    Share,
+    /// Create a public link to the album.
+    CreateLink,
+}
+
+/// Runs a right-click action for one of the user's own albums.
+pub type AlbumShare = Rc<dyn Fn(LibraryAlbum, AlbumAction)>;
 
 /// Sort modes available for the albums landing page.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -288,7 +297,7 @@ fn insert_tiles(
     }
 }
 
-/// Right-click a tile for a one-item menu that opens the sharing dialog.
+/// Right-click a tile for "Share…" and "Create Share Link…".
 fn attach_share_menu(tile: &gtk::Button, album: &LibraryAlbum, share: AlbumShare) {
     let click = gtk::GestureClick::builder()
         .button(gtk::gdk::BUTTON_SECONDARY)
@@ -301,16 +310,26 @@ fn attach_share_menu(tile: &gtk::Button, album: &LibraryAlbum, share: AlbumShare
             .build();
         popover.set_parent(&tile_ref);
         popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
-        let button = gtk::Button::builder()
-            .label("Share…")
-            .css_classes(["flat"])
+        let menu = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(4)
             .build();
-        let (share, album, popover_ref) = (share.clone(), album.clone(), popover.clone());
-        button.connect_clicked(move |_| {
-            popover_ref.popdown();
-            share(album.clone());
-        });
-        popover.set_child(Some(&button));
+        for (label, action) in [
+            ("Share…", AlbumAction::Share),
+            ("Create Share Link…", AlbumAction::CreateLink),
+        ] {
+            let button = gtk::Button::builder()
+                .label(label)
+                .css_classes(["flat"])
+                .build();
+            let (share, album, popover_ref) = (share.clone(), album.clone(), popover.clone());
+            button.connect_clicked(move |_| {
+                popover_ref.popdown();
+                share(album.clone(), action);
+            });
+            menu.append(&button);
+        }
+        popover.set_child(Some(&menu));
         popover.popup();
     });
     tile.add_controller(click);

@@ -13,7 +13,7 @@ use glib::clone;
 use gtk::prelude::*;
 use libadwaita::prelude::*;
 
-use crate::api_client::{LibraryAsset, MetadataSearchFilters, SortOrder, Tag};
+use crate::api_client::{LibraryAsset, MetadataSearchFilters, SharedLinkTarget, SortOrder, Tag};
 use crate::app_context::AppContext;
 use crate::library::albums_view::{AlbumClick, AlbumsViewParts, populate_albums};
 use crate::library::explore_view::ExploreViewParts;
@@ -65,6 +65,8 @@ mod lightbox;
 pub mod search_filters;
 pub mod search_view;
 mod server_stats_dialog;
+mod shared_link_dialog;
+mod shared_links_view;
 pub mod staging_view;
 mod trash_view;
 mod upload_picker;
@@ -104,6 +106,7 @@ struct LibraryWindowUi {
     grid: GridViewParts,
     explore: ExploreViewParts,
     albums: AlbumsViewParts,
+    shared_links: shared_links_view::SharedLinksView,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -141,6 +144,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     let window = parts.window.clone();
     let album_link_listbox = parts.content.album_link.listbox.clone();
     let bulk = &parts.content.bulk;
+    let bulk_share_link = bulk.share_link.clone();
     let (bulk_delete, bulk_download, bulk_clear) = (
         bulk.delete.clone(),
         bulk.download.clone(),
@@ -148,6 +152,31 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     );
     let ui = Rc::new(LibraryWindowUi::from_parts(ctx, app, parts));
 
+    connect_menus(ui.clone());
+    connect_album_link_row(ui.clone(), album_link_listbox);
+    connect_select_mode(ui.clone(), ui.select_toggle.clone());
+    connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
+    actions::connect_bulk_share_link(ui.clone(), &bulk_share_link);
+    trash_view::connect_trash_controls(ui.clone());
+    connect_sidebar_handlers(ui.clone());
+    connect_controls(ui.clone());
+    connect_grid_handlers(ui.clone());
+    connect_search_view(ui.clone());
+    connect_lightweight_filters(ui.clone());
+    connect_drop_target(ui.clone());
+
+    let close_ctx = ui.ctx.clone();
+    window.connect_close_request(move |_| {
+        close_ctx.thumbnail_cache.clear_memory();
+        glib::Propagation::Proceed
+    });
+
+    bootstrap_window(ui);
+    window.present();
+}
+
+/// Wire the grid right-click menu and the album tile sharing actions.
+fn connect_menus(ui: Rc<LibraryWindowUi>) {
     *ui.grid.context_menu_handler.borrow_mut() = Some(Box::new(clone!(
         #[strong]
         ui,
@@ -166,27 +195,17 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     let ui_for_share = ui.clone();
     albums_view::set_share_handler(
         &ui.albums,
-        Rc::new(move |album| album_share_dialog::present(ui_for_share.clone(), album)),
+        Rc::new(move |album, action| match action {
+            albums_view::AlbumAction::Share => {
+                album_share_dialog::present(ui_for_share.clone(), album)
+            }
+            albums_view::AlbumAction::CreateLink => shared_link_dialog::present(
+                ui_for_share.clone(),
+                shared_link_dialog::LinkDialogMode::Create(SharedLinkTarget::Album(album.id)),
+                Rc::new(|| {}),
+            ),
+        }),
     );
-    connect_album_link_row(ui.clone(), album_link_listbox);
-    connect_select_mode(ui.clone(), ui.select_toggle.clone());
-    connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
-    trash_view::connect_trash_controls(ui.clone());
-    connect_sidebar_handlers(ui.clone());
-    connect_controls(ui.clone());
-    connect_grid_handlers(ui.clone());
-    connect_search_view(ui.clone());
-    connect_lightweight_filters(ui.clone());
-    connect_drop_target(ui.clone());
-
-    let close_ctx = ui.ctx.clone();
-    window.connect_close_request(move |_| {
-        close_ctx.thumbnail_cache.clear_memory();
-        glib::Propagation::Proceed
-    });
-
-    bootstrap_window(ui);
-    window.present();
 }
 
 /// Bootstrap initial data loading and background tasks for the library window.

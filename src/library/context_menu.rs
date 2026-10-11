@@ -175,6 +175,16 @@ fn append_manage_buttons(
     }
 
     append_favorite_button(menu, ui, item, &hooks);
+    let (ui_link, link_id) = (ui.clone(), remote_id.clone());
+    menu.add("Create Share Link…", false, move || {
+        super::shared_link_dialog::present(
+            ui_link.clone(),
+            super::shared_link_dialog::LinkDialogMode::Create(
+                crate::api_client::SharedLinkTarget::Assets(vec![link_id.clone()]),
+            ),
+            Rc::new(|| {}),
+        )
+    });
     let (ui_edit, filename, on_edited) = (
         ui.clone(),
         item.property::<String>("filename"),

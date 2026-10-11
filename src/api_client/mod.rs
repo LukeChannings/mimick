@@ -18,6 +18,8 @@ mod library;
 mod search;
 mod sharing;
 pub use sharing::AlbumRole;
+mod shared_links;
+pub use shared_links::{SharedLink, SharedLinkOptions, SharedLinkTarget, share_url};
 mod suggestions;
 mod tags;
 mod trash;
