@@ -228,7 +228,7 @@ Click any asset in the grid to open it in the lightbox.
 - EXIF metadata is fetched (including for local files) and displayed alongside the asset.
 - **Download** saves the original file to the configured download folder.
 - **Move to trash** (trash button or **Delete**) moves the asset to the Immich trash after a confirmation, then shows the next asset. If it was the last one the lightbox steps back; if nothing is left it closes. Local copies are kept.
-- **Edit Info…** in the details pane (also in the right-click menu) edits the description, the date taken, and the favorite flag. The date uses local time as `YYYY-MM-DD HH:MM:SS`; Save stays disabled while it doesn't parse. Only changed fields are sent to Immich. If you change the date, the grid reloads when you close the lightbox, since the asset moves in the timeline.
+- **Edit Info…** in the details pane (also in the right-click menu) edits the description, the date taken, and the favorite flag (heart toggle). For the date, click the calendar button: pick a day, set the hour, minute, and second, then **Set Date** (local time). Only changed fields are sent to Immich. If you change the date, the grid reloads when you close the lightbox, since the asset moves in the timeline.
 - Right-clicking the picture opens the same context menu as the grid: Copy, Download, Open In, **Edit Info…**, and **Move to Trash**.
 
 ### Tags in the Details Pane
