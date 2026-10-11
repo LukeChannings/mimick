@@ -323,11 +323,37 @@ pub struct ServerStats {
     pub total: u64,
 }
 
-/// Immich server configuration and version details.
-#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+/// Immich server version and build details (`GET /api/server/about`).
+/// Everything except `version` is optional; older servers omit some fields.
+#[derive(Debug, Clone, Default, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
 pub struct ServerAbout {
     /// Semver string of the Immich instance.
     pub version: String,
+    pub version_url: Option<String>,
+    pub repository: Option<String>,
+    pub repository_url: Option<String>,
+    pub source_ref: Option<String>,
+    pub source_commit: Option<String>,
+    pub source_url: Option<String>,
+    pub build: Option<String>,
+    pub build_url: Option<String>,
+    pub build_image: Option<String>,
+    pub build_image_url: Option<String>,
+    pub nodejs: Option<String>,
+    pub ffmpeg: Option<String>,
+    pub imagemagick: Option<String>,
+    pub libvips: Option<String>,
+    pub exiftool: Option<String>,
+}
+
+/// One entry of the server's upgrade history (`GET /api/server/version-history`).
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionHistoryEntry {
+    pub version: String,
+    /// ISO 8601 timestamp of when this version was first started.
+    pub created_at: String,
 }
 
 /// Per-user usage row from `/api/server/statistics`.
@@ -1174,5 +1200,34 @@ mod tests {
             serde_json::from_value(serde_json::json!({ "isFavorite": true })).unwrap();
         assert!(details.is_favorite);
         assert!(details.exif_info.is_none());
+    }
+
+    #[test]
+    fn server_about_reads_full_and_minimal_payloads() {
+        let full: ServerAbout = serde_json::from_value(serde_json::json!({
+            "version": "v3.3.1",
+            "versionUrl": "https://github.com/immich-app/immich/releases/tag/v3.3.1",
+            "licensed": false,
+            "nodejs": "v24.21.0",
+            "exiftool": "13.59",
+            "sourceRef": "v3.3.1",
+            "sourceCommit": "db6e11ecc"
+        }))
+        .unwrap();
+        assert_eq!(full.nodejs.as_deref(), Some("v24.21.0"));
+        assert_eq!(full.source_commit.as_deref(), Some("db6e11ecc"));
+        let minimal: ServerAbout =
+            serde_json::from_value(serde_json::json!({ "version": "v1.0.0" })).unwrap();
+        assert_eq!(minimal.version, "v1.0.0");
+        assert!(minimal.ffmpeg.is_none());
+    }
+
+    #[test]
+    fn version_history_entry_deserializes() {
+        let entries: Vec<VersionHistoryEntry> = serde_json::from_value(serde_json::json!([
+            { "id": "a", "createdAt": "2026-10-09T08:00:00.000Z", "version": "3.3.1" }
+        ]))
+        .unwrap();
+        assert_eq!(entries[0].version, "3.3.1");
     }
 }

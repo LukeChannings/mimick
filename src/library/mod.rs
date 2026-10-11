@@ -51,6 +51,7 @@ pub mod state;
 pub mod style;
 pub mod thumbnail_cache;
 
+mod about_dialog;
 mod actions;
 mod album_link;
 mod asset_edit;

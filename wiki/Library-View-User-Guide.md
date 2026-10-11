@@ -27,7 +27,7 @@ The window uses a sidebar + content split.
 - **Albums** — album landing page
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
-- Bottom footer contains the server connection row (clicking it opens the **Server Statistics** dialog)
+- Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
 
 **Header bar controls (right side):**
 

@@ -10,7 +10,7 @@ use super::errors::{RequestContext, classify_http_issue, classify_network_issue}
 use super::{
     ExifSearchResponse, ExploreSection, ImmichApiClient, LibraryAsset, MetadataSearchFilters,
     PeopleResponse, Person, PlaceItem, SearchResponse, ServerAbout, ServerStatistics, ServerStats,
-    SortOrder,
+    SortOrder, VersionHistoryEntry,
 };
 
 impl ImmichApiClient {
@@ -374,6 +374,31 @@ impl ImmichApiClient {
     }
 
     /// Retrieve detailed Immich server system information (e.g. version).
+    /// Versions this server has run, newest first.
+    pub async fn fetch_version_history(&self) -> Result<Vec<VersionHistoryEntry>, String> {
+        let base_url = self
+            .get_active_url()
+            .await
+            .ok_or_else(|| "No active connection".to_string())?;
+        let settings = self.settings_snapshot();
+        let resp = self
+            .client
+            .get(format!("{}/api/server/version-history", base_url))
+            .header("x-api-key", &settings.api_key)
+            .header("Accept", "application/json")
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|err| err.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        let mut history: Vec<VersionHistoryEntry> =
+            resp.json().await.map_err(|err| err.to_string())?;
+        history.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(history)
+    }
+
     pub async fn fetch_server_about(&self) -> Result<ServerAbout, String> {
         let base_url = self
             .get_active_url()

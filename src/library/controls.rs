@@ -59,15 +59,21 @@ fn connect_window_actions(ui: &Rc<LibraryWindowUi>) {
     ));
     ui.window.add_action(&action_refresh);
 
-    for row in [&ui.sidebar.connection_row, &ui.sidebar.server_row] {
-        row.connect_activated(clone!(
-            #[strong]
-            ui,
-            move |_| {
-                super::server_stats_dialog::present(ui.ctx.clone(), &ui.window);
-            }
-        ));
-    }
+    // Connection row: usage statistics. Server row: version/build details.
+    ui.sidebar.connection_row.connect_activated(clone!(
+        #[strong]
+        ui,
+        move |_| {
+            super::server_stats_dialog::present(ui.ctx.clone(), &ui.window);
+        }
+    ));
+    ui.sidebar.server_row.connect_activated(clone!(
+        #[strong]
+        ui,
+        move |_| {
+            super::about_dialog::present(ui.ctx.clone(), &ui.window);
+        }
+    ));
 }
 
 /// Upload and back buttons, plus the Alt+Left and F5 shortcuts.
