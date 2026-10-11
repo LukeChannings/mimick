@@ -79,6 +79,12 @@ pub fn build_sidebar() -> SidebarParts {
         "albums",
     ));
     fixed_list.append(&action_row(
+        "Shared Albums",
+        "Shared with you and by you",
+        "folder-publicshare-symbolic",
+        "shared-albums",
+    ));
+    fixed_list.append(&action_row(
         "Favorites",
         "Photos and videos you've marked",
         "mimick-heart-filled-symbolic",

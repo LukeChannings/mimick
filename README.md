@@ -110,6 +110,7 @@ Each watched directory operates with isolated logical constraints:
 - **Manage Assets:** Edit an asset's description, date taken, and favorite flag, or move it to the Immich trash (right-click, lightbox button, or **Delete**).
 - **Tags:** View, add, create, and remove tags in the lightbox details pane; click a tag or use the Tag search filter to find tagged assets.
 - **Favorites:** A heart in the lightbox (or **F**, the right-click menu, or Edit Info) marks favorites instantly; favorited thumbnails show a small heart, and the **Favorites** sidebar entry lists them.
+- **Shared Albums:** A **Shared Albums** sidebar entry lists albums shared with you and by you; right-click one of your albums to share it with other users, change their role (Viewer/Editor), or remove them.
 - **Server About:** Click the server row in the library sidebar for the Immich version, component versions (ExifTool, Node.js, FFmpeg, …), source/build links, and the server's version history.
 - **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
 - **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).
@@ -185,6 +186,7 @@ When generating the API key in Immich (Account Settings → API Keys), grant onl
 | Server Stats Dialog (click server name in Settings)                 | `server.about`, `server.versionCheck`, `server.statistics`, `asset.statistics`                                                                 |
 | Library Footer Statistics (photo/video counts)                      | `asset.statistics`                                                                                                                                             |
 | Server About dialog (click the server row in the library sidebar)   | `server.about`, `server.versionCheck`                                                                                                                          |
+| Shared Albums (share your albums, change roles, remove people)      | `album.read`, `albumUser.create`, `albumUser.update`, `albumUser.delete`, `user.read`                                                                          |
 | Library / Explore view (browse photos inside Mimick)                | `asset.read`, `asset.view`, `asset.download`, `person.read`                                                                                                    |
 | Edit info / move to trash from the library                          | `asset.update`, `asset.delete`                                                                                                                                 |
 | Trash view (restore, delete permanently, empty trash)               | `asset.read`, `asset.delete`                                                                                                                                   |

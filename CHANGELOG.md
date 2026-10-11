@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tag support: tags show in the lightbox details pane, where they can be added, created, or removed, and clicking a tag (or using the new Tag search filter) shows every photo with that tag (#141).
 - Added a Trash view to the library sidebar: restore or permanently delete trashed items, or empty the trash (#229).
 - Added favorites: a heart button in the lightbox (or **F**), menu and Edit Info toggles, a heart badge on favorited thumbnails, and a Favorites sidebar entry.
+- Added a Shared Albums sidebar entry, and a Share dialog for your albums (add people, change Viewer/Editor roles, remove people).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed

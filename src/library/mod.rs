@@ -55,6 +55,7 @@ pub mod thumbnail_cache;
 mod about_dialog;
 mod actions;
 mod album_link;
+mod album_share_dialog;
 mod asset_edit;
 mod asset_tags;
 mod context_menu;
@@ -162,6 +163,11 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
         }
     )));
 
+    let ui_for_share = ui.clone();
+    albums_view::set_share_handler(
+        &ui.albums,
+        Rc::new(move |album| album_share_dialog::present(ui_for_share.clone(), album)),
+    );
     connect_album_link_row(ui.clone(), album_link_listbox);
     connect_select_mode(ui.clone(), ui.select_toggle.clone());
     connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);

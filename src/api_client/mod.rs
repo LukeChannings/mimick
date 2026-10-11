@@ -16,6 +16,8 @@ mod albums;
 mod errors;
 mod library;
 mod search;
+mod sharing;
+pub use sharing::AlbumRole;
 mod suggestions;
 mod tags;
 mod trash;
@@ -122,6 +124,21 @@ pub struct AlbumUser {
 pub struct AlbumUserInfo {
     /// Unique user identifier.
     pub id: String,
+    /// Display name (absent in some older album list responses).
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+}
+
+/// A user on the server, as listed by `GET /api/users` (for sharing).
+#[derive(Debug, Clone, serde::Deserialize, PartialEq, Eq)]
+pub struct UserSummary {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
 }
 
 /// Detailed Immich library asset representation.

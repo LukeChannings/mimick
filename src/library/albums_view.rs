@@ -14,6 +14,8 @@ use crate::api_client::{LibraryAlbum, ThumbnailSize};
 use crate::app_context::AppContext;
 
 pub type AlbumClick = Rc<dyn Fn(&str, String)>;
+/// Opens the sharing dialog for one of the user's own albums.
+pub type AlbumShare = Rc<dyn Fn(LibraryAlbum)>;
 
 /// Sort modes available for the albums landing page.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -29,6 +31,11 @@ pub struct AlbumsViewParts {
     pub root: gtk::ScrolledWindow,
     pub populated: Rc<Cell<bool>>,
     pub create_button: gtk::Button,
+    title: gtk::Label,
+    owned_title: gtk::Label,
+    /// Shared Albums mode: only "Shared by you" and "Shared with you".
+    shared_only: Rc<Cell<bool>>,
+    cached_share: Rc<RefCell<Option<AlbumShare>>>,
     recent_grid: gtk::FlowBox,
     owned_grid: gtk::FlowBox,
     shared_grid: gtk::FlowBox,
@@ -54,6 +61,47 @@ pub fn build_albums_view() -> AlbumsViewParts {
         .margin_end(16)
         .build();
 
+    let (header_row, title, filter_entry, create_button) = build_header();
+    outer.append(&header_row);
+
+    let (recent_section, _, recent_grid) = build_section("Recent");
+    let (owned_section, owned_title, owned_grid) = build_section("Your albums");
+    let (shared_section, _, shared_grid) = build_section("Shared with you");
+    outer.append(&recent_section);
+    outer.append(&owned_section);
+    outer.append(&shared_section);
+
+    let root = gtk::ScrolledWindow::builder()
+        .child(&outer)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .build();
+
+    AlbumsViewParts {
+        root,
+        populated: Rc::new(Cell::new(false)),
+        create_button,
+        title,
+        owned_title,
+        shared_only: Rc::default(),
+        cached_share: Rc::default(),
+        recent_grid,
+        owned_grid,
+        shared_grid,
+        recent_section,
+        owned_section,
+        shared_section,
+        cached_albums: Rc::new(RefCell::new(Vec::new())),
+        cached_click: Rc::new(RefCell::new(None)),
+        search_query: Rc::new(RefCell::new(String::new())),
+        filter_entry,
+        sort_mode: Rc::new(Cell::new(AlbumsSort::default())),
+        cached_ctx: Rc::new(RefCell::new(None)),
+    }
+}
+
+/// Page title with the filter entry and "Create album" button below it.
+fn build_header() -> (gtk::Box, gtk::Label, gtk::SearchEntry, gtk::Button) {
     let header_row = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(8)
@@ -81,38 +129,7 @@ pub fn build_albums_view() -> AlbumsViewParts {
     filter_row.append(&filter_entry);
     filter_row.append(&create_button);
     header_row.append(&filter_row);
-    outer.append(&header_row);
-
-    let (recent_section, recent_grid) = build_section("Recent");
-    let (owned_section, owned_grid) = build_section("Your albums");
-    let (shared_section, shared_grid) = build_section("Shared with you");
-    outer.append(&recent_section);
-    outer.append(&owned_section);
-    outer.append(&shared_section);
-
-    let root = gtk::ScrolledWindow::builder()
-        .child(&outer)
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vexpand(true)
-        .build();
-
-    AlbumsViewParts {
-        root,
-        populated: Rc::new(Cell::new(false)),
-        create_button,
-        recent_grid,
-        owned_grid,
-        shared_grid,
-        recent_section,
-        owned_section,
-        shared_section,
-        cached_albums: Rc::new(RefCell::new(Vec::new())),
-        cached_click: Rc::new(RefCell::new(None)),
-        search_query: Rc::new(RefCell::new(String::new())),
-        filter_entry,
-        sort_mode: Rc::new(Cell::new(AlbumsSort::default())),
-        cached_ctx: Rc::new(RefCell::new(None)),
-    }
+    (header_row, title, filter_entry, create_button)
 }
 
 /// Populate the album list grids grouped by ownership status.
@@ -126,6 +143,33 @@ pub fn populate_albums(
     *parts.cached_click.borrow_mut() = Some(on_click);
     *parts.cached_ctx.borrow_mut() = Some(ctx);
     render_albums(parts);
+}
+
+/// Switch between the full Albums page and the Shared Albums page, then re-render.
+pub fn set_shared_only(parts: &AlbumsViewParts, shared_only: bool) {
+    parts.shared_only.set(shared_only);
+    parts.title.set_label(if shared_only {
+        "Shared Albums"
+    } else {
+        "Albums"
+    });
+    parts.owned_title.set_label(if shared_only {
+        "Shared by you"
+    } else {
+        "Your albums"
+    });
+    parts.create_button.set_visible(!shared_only);
+    render_albums(parts);
+}
+
+/// Handler for "Share…" on the user's own album tiles.
+pub fn set_share_handler(parts: &AlbumsViewParts, share: AlbumShare) {
+    *parts.cached_share.borrow_mut() = Some(share);
+}
+
+/// The user's albums that have at least one other member.
+fn shared_by_you(owned: Vec<&LibraryAlbum>) -> Vec<&LibraryAlbum> {
+    owned.into_iter().filter(|a| a.is_shared()).collect()
 }
 
 /// Set the current search filter and re-render. Empty string clears the filter.
@@ -211,23 +255,15 @@ fn render_albums(parts: &AlbumsViewParts) {
     let sort = parts.sort_mode.get();
 
     let albums = parts.cached_albums.borrow();
-    let (recent, owned, shared) = project_albums(&albums, &current_user, &query, sort);
-
-    for album in &recent {
-        parts
-            .recent_grid
-            .insert(&album_tile(ctx.clone(), album, on_click.clone()), -1);
+    let (mut recent, mut owned, shared) = project_albums(&albums, &current_user, &query, sort);
+    if parts.shared_only.get() {
+        recent.clear();
+        owned = shared_by_you(owned);
     }
-    for album in &owned {
-        parts
-            .owned_grid
-            .insert(&album_tile(ctx.clone(), album, on_click.clone()), -1);
-    }
-    for album in &shared {
-        parts
-            .shared_grid
-            .insert(&album_tile(ctx.clone(), album, on_click.clone()), -1);
-    }
+    let share = parts.cached_share.borrow().clone();
+    insert_tiles(&parts.recent_grid, &recent, &ctx, &on_click, None);
+    insert_tiles(&parts.owned_grid, &owned, &ctx, &on_click, share);
+    insert_tiles(&parts.shared_grid, &shared, &ctx, &on_click, None);
 
     parts.recent_section.set_visible(!recent.is_empty());
     parts.owned_section.set_visible(!owned.is_empty());
@@ -235,8 +271,53 @@ fn render_albums(parts: &AlbumsViewParts) {
     parts.populated.set(true);
 }
 
+/// Add a tile per album; `share` (own albums only) enables the right-click "Share…".
+fn insert_tiles(
+    grid: &gtk::FlowBox,
+    albums: &[&LibraryAlbum],
+    ctx: &Arc<AppContext>,
+    on_click: &AlbumClick,
+    share: Option<AlbumShare>,
+) {
+    for album in albums {
+        let tile = album_tile(ctx.clone(), album, on_click.clone());
+        if let Some(share) = &share {
+            attach_share_menu(&tile, album, share.clone());
+        }
+        grid.insert(&tile, -1);
+    }
+}
+
+/// Right-click a tile for a one-item menu that opens the sharing dialog.
+fn attach_share_menu(tile: &gtk::Button, album: &LibraryAlbum, share: AlbumShare) {
+    let click = gtk::GestureClick::builder()
+        .button(gtk::gdk::BUTTON_SECONDARY)
+        .build();
+    let (tile_ref, album) = (tile.clone(), album.clone());
+    click.connect_pressed(move |_, _, x, y| {
+        let popover = gtk::Popover::builder()
+            .has_arrow(true)
+            .autohide(true)
+            .build();
+        popover.set_parent(&tile_ref);
+        popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        let button = gtk::Button::builder()
+            .label("Share…")
+            .css_classes(["flat"])
+            .build();
+        let (share, album, popover_ref) = (share.clone(), album.clone(), popover.clone());
+        button.connect_clicked(move |_| {
+            popover_ref.popdown();
+            share(album.clone());
+        });
+        popover.set_child(Some(&button));
+        popover.popup();
+    });
+    tile.add_controller(click);
+}
+
 /// Build a single category grid section with a text label and a flow box layout.
-fn build_section(title: &str) -> (gtk::Box, gtk::FlowBox) {
+fn build_section(title: &str) -> (gtk::Box, gtk::Label, gtk::FlowBox) {
     let section = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(8)
@@ -257,7 +338,7 @@ fn build_section(title: &str) -> (gtk::Box, gtk::FlowBox) {
         .build();
     section.append(&label);
     section.append(&grid);
-    (section, grid)
+    (section, label, grid)
 }
 
 /// Build a clickable tile representing an individual album complete with cover art.
@@ -371,7 +452,11 @@ mod tests {
             updated_at: created.into(),
             description: String::new(),
             album_users: vec![AlbumUser {
-                user: AlbumUserInfo { id: owner.into() },
+                user: AlbumUserInfo {
+                    id: owner.into(),
+                    name: String::new(),
+                    email: String::new(),
+                },
                 role: "owner".into(),
             }],
         }
@@ -420,6 +505,22 @@ mod tests {
         let (_, owned, _) = project_albums(&items, "me", "", AlbumsSort::MostAssets);
         let counts: Vec<u32> = owned.iter().map(|a| a.asset_count).collect();
         assert_eq!(counts, vec![1000, 200, 12]);
+    }
+
+    #[test]
+    fn shared_by_you_keeps_only_albums_with_other_members() {
+        let mut items = fixture();
+        items[0].album_users.push(AlbumUser {
+            user: AlbumUserInfo {
+                id: "friend".into(),
+                name: "Friend".into(),
+                email: String::new(),
+            },
+            role: "viewer".into(),
+        });
+        let (_, owned, _) = project_albums(&items, "me", "", AlbumsSort::Newest);
+        let shared: Vec<&str> = shared_by_you(owned).iter().map(|a| a.id.as_str()).collect();
+        assert_eq!(shared, ["a1"]);
     }
 
     #[test]

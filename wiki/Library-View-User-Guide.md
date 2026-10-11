@@ -26,6 +26,7 @@ The window uses a sidebar + content split.
 - **Explore** — People, Places, Things
 - **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
 - **Albums** — album landing page
+- **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
@@ -287,6 +288,16 @@ These options are in **Settings → Behavior** and apply to the library view.
 | **Download Folder** | Not set | First download opens a folder picker; the chosen path is saved and reused for subsequent downloads. |
 
 See [Performance Tuning](Performance-Tuning) for guidance on choosing values for these settings.
+
+---
+
+## Shared Albums
+
+- The **Shared Albums** sidebar entry shows **Shared by you** (your albums that have other members) and **Shared with you**. Click an album to open it.
+- Right-click one of your own albums (here or on the Albums page) and choose **Share…**:
+  - **Shared with** lists everyone in the album. Change a person's role with the **Viewer / Editor** dropdown, or remove them with the trash button. The owner is shown but can't be changed.
+  - **Add people** lists users on the server who aren't in the album yet; type to filter by name or email, then **Add** (they join as Viewer).
+- Every change is saved to Immich immediately. Requires `albumUser.create`, `albumUser.update`, `albumUser.delete`, and `user.read` (without `user.read`, the Add people list stays empty).
 
 ---
 
