@@ -33,10 +33,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
+        let settings = self.settings_snapshot();
         let resp = self
             .client
             .get(format!("{}/api/tags", base_url))
-            .headers(self.auth_headers())
+            .header("x-api-key", &settings.api_key)
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(15))
             .send()
@@ -56,10 +57,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
+        let settings = self.settings_snapshot();
         let resp = self
             .client
             .put(format!("{}/api/tags", base_url))
-            .headers(self.auth_headers())
+            .header("x-api-key", &settings.api_key)
             .header("Accept", "application/json")
             .json(&serde_json::json!({ "tags": [value] }))
             .timeout(Duration::from_secs(15))
@@ -98,10 +100,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
+        let settings = self.settings_snapshot();
         let resp = self
             .client
             .request(method, format!("{}/api/tags/{}/assets", base_url, tag_id))
-            .headers(self.auth_headers())
+            .header("x-api-key", &settings.api_key)
             .header("Accept", "application/json")
             .json(&serde_json::json!({ "ids": [asset_id] }))
             .timeout(Duration::from_secs(15))

@@ -83,8 +83,8 @@ pub fn present(ctx: Arc<AppContext>, parent: &libadwaita::ApplicationWindow) {
         .spacing(18)
         .margin_top(18)
         .margin_bottom(24)
-        .margin_start(24)
-        .margin_end(24)
+        .margin_start(18)
+        .margin_end(18)
         .build();
     let spinner = gtk::Spinner::builder().spinning(true).build();
     content.append(&spinner);
@@ -141,21 +141,25 @@ fn build_dialog(content: &gtk::Box) -> libadwaita::Dialog {
     libadwaita::Dialog::builder()
         .title("About")
         .content_width(640)
+        // Fixed height: the dialog is sized before the details load, so its natural height
+        // would only fit the spinner. Smaller windows still shrink it to fit.
+        .content_height(600)
         .child(&toolbar)
         .build()
 }
 
-/// Two columns of name/value cells, filled left to right.
-fn about_grid(rows: &[AboutRow]) -> gtk::Grid {
-    let grid = gtk::Grid::builder()
+/// Name/value cells, filled left to right: two columns, or one on narrow windows.
+fn about_grid(rows: &[AboutRow]) -> gtk::FlowBox {
+    let grid = gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .min_children_per_line(1)
+        .max_children_per_line(2)
+        .homogeneous(true)
         .column_spacing(32)
         .row_spacing(18)
-        .column_homogeneous(true)
         .build();
-    for (index, row) in rows.iter().enumerate() {
-        let column = (index % 2) as i32;
-        let line = (index / 2) as i32;
-        grid.attach(&about_cell(row), column, line, 1, 1);
+    for row in rows {
+        grid.insert(&about_cell(row), -1);
     }
     grid
 }
@@ -176,6 +180,7 @@ fn about_cell(row: &AboutRow) -> gtk::Box {
         .xalign(0.0)
         .selectable(true)
         .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
         .css_classes(["dim-label"])
         .build();
     match &row.url {
@@ -208,6 +213,7 @@ fn history_section(history: &[VersionHistoryEntry]) -> gtk::Box {
             &gtk::Label::builder()
                 .label(history_line(entry))
                 .xalign(0.0)
+                .wrap(true)
                 .build(),
         );
     }

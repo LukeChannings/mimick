@@ -27,7 +27,8 @@ pub(super) struct TrashControls {
     live_only: Vec<gtk::Button>,
 }
 
-pub(super) fn build_trash_controls(live_only: Vec<gtk::Button>) -> TrashControls {
+/// Bar above the grid in the Trash: the retention note with Restore All and Empty Trash.
+fn build_trash_bar(restore_all: &gtk::Button, empty: &gtk::Button) -> gtk::Revealer {
     let note = gtk::Label::builder()
         .label("Immich permanently deletes trashed items after its retention period (30 days by default).")
         .xalign(0.0)
@@ -35,27 +36,39 @@ pub(super) fn build_trash_controls(live_only: Vec<gtk::Button>) -> TrashControls
         .wrap(true)
         .css_classes(["dim-label"])
         .build();
-    let restore_all = gtk::Button::builder().label("Restore All").build();
-    let empty = gtk::Button::builder()
-        .label("Empty Trash")
-        .css_classes(["destructive-action"])
-        .build();
-    let inner = gtk::Box::builder()
+    let buttons = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(8)
+        .halign(gtk::Align::End)
+        .build();
+    buttons.append(restore_all);
+    buttons.append(empty);
+    // Note above the buttons: the bar's width counts even while hidden, and side by side
+    // they don't fit a 360 px window.
+    let inner = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(6)
         .margin_top(6)
         .margin_bottom(6)
         .margin_start(12)
         .margin_end(12)
         .build();
     inner.append(&note);
-    inner.append(&restore_all);
-    inner.append(&empty);
-    let bar = gtk::Revealer::builder()
+    inner.append(&buttons);
+    gtk::Revealer::builder()
         .transition_type(gtk::RevealerTransitionType::SlideDown)
         .reveal_child(false)
         .child(&inner)
+        .build()
+}
+
+pub(super) fn build_trash_controls(live_only: Vec<gtk::Button>) -> TrashControls {
+    let restore_all = gtk::Button::builder().label("Restore All").build();
+    let empty = gtk::Button::builder()
+        .label("Empty Trash")
+        .css_classes(["destructive-action"])
         .build();
+    let bar = build_trash_bar(&restore_all, &empty);
     let restore_selected = gtk::Button::builder()
         .icon_name("edit-undo-symbolic")
         .tooltip_text("Restore selected")

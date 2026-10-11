@@ -135,8 +135,7 @@ impl TagSection {
         let remove_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
             .tooltip_text(format!("Remove “{}”", tag.value))
-            .valign(gtk::Align::Center)
-            .css_classes(["flat", "circular", "mimick-tag-remove"])
+            .css_classes(["flat", "mimick-tag-remove"])
             .build();
         let section = self.clone();
         let removed = tag.clone();

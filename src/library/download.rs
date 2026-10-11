@@ -86,15 +86,6 @@ pub(super) fn open_local_with_default_app(path: &str) {
 }
 
 pub(super) fn spawn_video_handoff(ui: Rc<LibraryWindowUi>, asset_id: String, filename: String) {
-    // The external player needs a file on disk, which would leave a copy of a locked video behind.
-    if super::locked_folder::is_active(&ui) {
-        super::context_menu::show_alert_dialog(
-            &ui,
-            "Can't Play Locked Videos",
-            "Playing a video saves a copy to disk, so Locked Folder videos only play in Immich web or mobile.",
-        );
-        return;
-    }
     glib::MainContext::default().spawn_local(async move {
         let Some(cache_dir) = crate::profile::cache_dir().map(|p| p.join("video")) else {
             return;

@@ -332,7 +332,6 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                 "albums" => show_albums_page(&ui, false),
                 "shared-albums" => show_albums_page(&ui, true),
                 "shared-links" => super::shared_links_view::show(&ui),
-                "locked" => super::locked_folder::open(&ui),
                 _ => {}
             }
             auto_hide_sidebar(&ui);

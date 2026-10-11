@@ -267,8 +267,8 @@ picture.mimick-person-avatar:active {
     background-color: alpha(@warning_bg_color, 0.22);
 }
 
-/* Tag pills in the details pane: one rounded chip holding the clickable
-   name (color dot + label) and a small remove button. */
+/* Tag pills in the details pane: a split chip. The left half (color dot + name)
+   searches the tag; the right half is a full-height 32 px remove target. */
 box.mimick-tag-chip {
     border-radius: 999px;
     background-color: alpha(@accent_bg_color, 0.14);
@@ -276,21 +276,27 @@ box.mimick-tag-chip {
 }
 
 box.mimick-tag-chip > button.mimick-tag-name {
-    min-height: 26px;
-    padding: 2px 4px 2px 10px;
-    border-radius: 999px;
+    min-height: 32px;
+    padding: 0 10px 0 12px;
+    border-radius: 999px 0 0 999px;
 }
 
 box.mimick-tag-chip > button.mimick-tag-remove {
-    min-width: 22px;
-    min-height: 22px;
+    min-width: 32px;
+    min-height: 32px;
     padding: 0;
-    margin-right: 3px;
-    -gtk-icon-size: 12px;
+    border-radius: 0 999px 999px 0;
+    border-left: 1px solid alpha(@accent_bg_color, 0.35);
+    -gtk-icon-size: 14px;
 }
 
-box.mimick-tag-chip > button:hover {
+box.mimick-tag-chip > button.mimick-tag-name:hover {
     background-color: alpha(@accent_bg_color, 0.22);
+}
+
+box.mimick-tag-chip > button.mimick-tag-remove:hover {
+    background-color: alpha(@destructive_bg_color, 0.20);
+    color: @destructive_color;
 }
 
 scrolledwindow.mimick-details-pane {

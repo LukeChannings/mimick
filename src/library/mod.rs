@@ -62,8 +62,6 @@ mod context_menu;
 mod controls;
 mod download;
 mod lightbox;
-mod locked_dialog;
-mod locked_folder;
 pub mod search_filters;
 pub mod search_view;
 mod server_stats_dialog;
@@ -128,8 +126,6 @@ struct LibraryWindowUi {
     select_toggle: gtk::ToggleButton,
     bulk_bar: gtk::Revealer,
     trash: trash_view::TrashControls,
-    locked: locked_folder::LockedControls,
-    locked_session: RefCell<Option<locked_folder::LockedSession>>,
     bulk_count_label: gtk::Label,
     album_link_row: libadwaita::ActionRow,
     album_link_button: gtk::Button,
@@ -162,7 +158,6 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
     actions::connect_bulk_share_link(ui.clone(), &bulk_share_link);
     trash_view::connect_trash_controls(ui.clone());
-    locked_folder::connect_locked_controls(&ui);
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
     connect_grid_handlers(ui.clone());
@@ -586,17 +581,26 @@ fn spawn_transfer_poll_loop(ui: Rc<LibraryWindowUi>) {
 
 /// Fetch current logged-in API user ID and store it in app context.
 fn fetch_current_user(ui: Rc<LibraryWindowUi>) {
-    if ui.ctx.current_user_id.lock().is_some() {
-        return;
-    }
     glib::MainContext::default().spawn_local(async move {
-        match ui.ctx.api_client.fetch_current_user_id().await {
-            Ok(id) => {
-                *ui.ctx.current_user_id.lock() = Some(id);
-            }
-            Err(err) => log::warn!("Could not fetch current user id: {}", err),
-        }
+        ensure_current_user_id(&ui.ctx).await;
     });
+}
+
+/// The API key's user id, fetched and cached on first use.
+async fn ensure_current_user_id(ctx: &AppContext) -> Option<String> {
+    if let Some(id) = ctx.current_user_id.lock().clone() {
+        return Some(id);
+    }
+    match ctx.api_client.fetch_current_user_id().await {
+        Ok(id) => {
+            *ctx.current_user_id.lock() = Some(id.clone());
+            Some(id)
+        }
+        Err(err) => {
+            log::warn!("Could not fetch current user id: {}", err);
+            None
+        }
+    }
 }
 
 /// Connect action handlers to the album creation widgets.
@@ -657,6 +661,8 @@ fn prompt_create_album(ui: Rc<LibraryWindowUi>) {
 /// stack child to "albums" or "error".
 fn refresh_albums_view(ui: Rc<LibraryWindowUi>) {
     glib::MainContext::default().spawn_local(async move {
+        // Albums are split into yours and shared-with-you by owner, so the id must be known.
+        ensure_current_user_id(&ui.ctx).await;
         match ui.ctx.api_client.fetch_library_albums().await {
             Ok(albums) => {
                 let on_click = album_click_handler(ui.clone());
@@ -766,7 +772,6 @@ fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     // Source-mode (Remote/Local/Unified) only relevant inside an album.
     ui.source_revealer.set_reveal_child(in_album);
     trash_view::set_trash_mode(ui, matches!(source, LibrarySource::Trash));
-    locked_folder::set_locked_mode(ui, matches!(source, LibrarySource::LockedFolder));
 
     if in_album {
         ui.upload_button.set_tooltip_text(Some("Upload to album"));
@@ -1094,19 +1099,6 @@ async fn fetch_source_page(
     }
 }
 
-/// Fixed search filters behind the Favorites, Locked Folder, and Trash views.
-fn view_filters(source: &LibrarySource) -> MetadataSearchFilters {
-    match source {
-        LibrarySource::Favorites => MetadataSearchFilters {
-            is_favorite: Some(true),
-            ..MetadataSearchFilters::default()
-        },
-        LibrarySource::LockedFolder => MetadataSearchFilters::locked(),
-        LibrarySource::Trash => MetadataSearchFilters::trashed(),
-        _ => MetadataSearchFilters::default(),
-    }
-}
-
 async fn fetch_remote_page(
     api: &crate::api_client::ImmichApiClient,
     source: LibrarySource,
@@ -1130,10 +1122,19 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
-        LibrarySource::Favorites | LibrarySource::LockedFolder | LibrarySource::Trash => {
+        LibrarySource::Favorites => {
             let filters = MetadataSearchFilters {
                 order,
-                ..view_filters(&source)
+                is_favorite: Some(true),
+                ..MetadataSearchFilters::default()
+            };
+            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
+                .await
+        }
+        LibrarySource::Trash => {
+            let filters = MetadataSearchFilters {
+                order,
+                ..MetadataSearchFilters::trashed()
             };
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
@@ -1334,10 +1335,6 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Trash => {
             select_fixed_row(&ui.sidebar.fixed_list, "trash");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::LockedFolder => {
-            select_fixed_row(&ui.sidebar.fixed_list, "locked");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Album { id, .. }
@@ -1688,21 +1685,4 @@ fn show_library_permission_error(window: &libadwaita::ApplicationWindow) {
         .build();
     dialog.add_response("close", "Close");
     dialog.present(Some(window));
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn view_filters_match_each_fixed_view() {
-        let favorites = view_filters(&LibrarySource::Favorites);
-        assert_eq!(favorites.is_favorite, Some(true));
-        let locked = view_filters(&LibrarySource::LockedFolder);
-        assert_eq!(locked.visibility.as_deref(), Some("locked"));
-        assert_eq!(
-            view_filters(&LibrarySource::Trash),
-            MetadataSearchFilters::trashed()
-        );
-    }
 }

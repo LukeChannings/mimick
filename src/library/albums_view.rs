@@ -51,6 +51,8 @@ pub struct AlbumsViewParts {
     recent_section: gtk::Box,
     owned_section: gtk::Box,
     shared_section: gtk::Box,
+    /// Shown on the Shared Albums page when there is nothing to list.
+    empty: libadwaita::StatusPage,
     cached_albums: Rc<RefCell<Vec<LibraryAlbum>>>,
     cached_click: Rc<RefCell<Option<AlbumClick>>>,
     pub search_query: Rc<RefCell<String>>,
@@ -79,6 +81,8 @@ pub fn build_albums_view() -> AlbumsViewParts {
     outer.append(&recent_section);
     outer.append(&owned_section);
     outer.append(&shared_section);
+    let empty = build_empty_state();
+    outer.append(&empty);
 
     let root = gtk::ScrolledWindow::builder()
         .child(&outer)
@@ -100,6 +104,7 @@ pub fn build_albums_view() -> AlbumsViewParts {
         recent_section,
         owned_section,
         shared_section,
+        empty,
         cached_albums: Rc::new(RefCell::new(Vec::new())),
         cached_click: Rc::new(RefCell::new(None)),
         search_query: Rc::new(RefCell::new(String::new())),
@@ -277,7 +282,34 @@ fn render_albums(parts: &AlbumsViewParts) {
     parts.recent_section.set_visible(!recent.is_empty());
     parts.owned_section.set_visible(!owned.is_empty());
     parts.shared_section.set_visible(!shared.is_empty());
+    let nothing_shared = parts.shared_only.get() && owned.is_empty() && shared.is_empty();
+    show_empty_state(parts, nothing_shared, current_user.is_empty());
     parts.populated.set(true);
+}
+
+fn build_empty_state() -> libadwaita::StatusPage {
+    libadwaita::StatusPage::builder()
+        .icon_name("folder-publicshare-symbolic")
+        .visible(false)
+        .build()
+}
+
+/// Explain an empty Shared Albums page; without the user id albums can't be sorted by owner.
+fn show_empty_state(parts: &AlbumsViewParts, visible: bool, user_unknown: bool) {
+    let (title, description) = if user_unknown {
+        (
+            "Couldn't Tell Which Albums Are Yours",
+            "Your API key needs the 'user.read' permission.",
+        )
+    } else {
+        (
+            "No Shared Albums",
+            "Share one of your albums, or ask someone to share one with you.",
+        )
+    };
+    parts.empty.set_title(title);
+    parts.empty.set_description(Some(description));
+    parts.empty.set_visible(visible);
 }
 
 /// Add a tile per album; `share` (own albums only) enables the right-click "Share…".
@@ -478,6 +510,7 @@ mod tests {
                 },
                 role: "owner".into(),
             }],
+            shared: false,
         }
     }
 
@@ -540,6 +573,15 @@ mod tests {
         let (_, owned, _) = project_albums(&items, "me", "", AlbumsSort::Newest);
         let shared: Vec<&str> = shared_by_you(owned).iter().map(|a| a.id.as_str()).collect();
         assert_eq!(shared, ["a1"]);
+    }
+
+    #[test]
+    fn shared_by_you_includes_albums_shared_only_by_link() {
+        let mut items = fixture();
+        items[2].shared = true;
+        let (_, owned, _) = project_albums(&items, "me", "", AlbumsSort::Newest);
+        let shared: Vec<&str> = shared_by_you(owned).iter().map(|a| a.id.as_str()).collect();
+        assert_eq!(shared, ["a3"]);
     }
 
     #[test]

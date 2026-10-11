@@ -4,7 +4,7 @@
 //! the responsive breakpoints. `build_library_window` in the parent module wires
 //! signal handlers onto the result.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -19,7 +19,6 @@ use crate::library::masonry::{GridViewParts, build_grid_view};
 use crate::library::search_view::{SearchViewParts, build_search_view};
 use crate::library::sidebar::{SidebarParts, build_sidebar};
 
-use super::locked_folder::{LockedControls, build_locked_controls};
 use super::shared_links_view::{SharedLinksView, build_shared_links_view};
 use super::trash_view::{self, TrashControls};
 use super::{LibraryWindowUi, build_drop_overlay, build_loading_view, build_status_view};
@@ -81,7 +80,6 @@ pub(super) struct ContentParts {
     transfer: TransferParts,
     pub album_link: AlbumLinkParts,
     pub bulk: BulkParts,
-    locked: LockedControls,
 }
 
 /// The whole library window before signal handlers are connected.
@@ -157,7 +155,6 @@ impl ContentParts {
             transfer: build_transfer_bar(),
             album_link: build_album_link(),
             bulk: build_bulk_bar(),
-            locked: build_locked_controls(),
         }
     }
 
@@ -170,7 +167,6 @@ impl ContentParts {
         column.append(&self.search_view.root);
         column.append(&self.album_link.listbox);
         column.append(&self.bulk.trash.bar);
-        column.append(&self.locked.bar);
         column.append(&self.banner);
         column.append(&self.stack);
         column.append(&self.bulk.bar);
@@ -216,8 +212,6 @@ impl LibraryWindowUi {
             select_toggle: header.select_toggle,
             bulk_bar: content.bulk.bar,
             trash: content.bulk.trash,
-            locked: content.locked,
-            locked_session: RefCell::new(None),
             bulk_count_label: content.bulk.count_label,
             album_link_row: content.album_link.row,
             album_link_button: content.album_link.link_button,

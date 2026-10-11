@@ -20,6 +20,7 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
+        let settings = self.settings_snapshot();
         let url = format!(
             "{}/api/search/suggestions?type={}",
             base_url, suggestion_type
@@ -27,7 +28,7 @@ impl ImmichApiClient {
         match self
             .client
             .get(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &settings.api_key)
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()

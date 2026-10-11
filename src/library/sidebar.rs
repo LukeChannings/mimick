@@ -17,7 +17,7 @@ pub struct SidebarParts {
 }
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
-const FIXED_ROWS: [(&str, &str, &str, &str); 9] = [
+const FIXED_ROWS: [(&str, &str, &str, &str); 8] = [
     (
         "Photos",
         "Timeline of every photo and video",
@@ -59,12 +59,6 @@ const FIXED_ROWS: [(&str, &str, &str, &str); 9] = [
         "Photos and videos you've marked",
         "mimick-heart-filled-symbolic",
         "favorites",
-    ),
-    (
-        "Locked Folder",
-        "Unlock with your password and PIN",
-        "changes-prevent-symbolic",
-        "locked",
     ),
     (
         "Trash",
@@ -133,15 +127,22 @@ pub fn build_sidebar() -> SidebarParts {
 
     let albums_list = selectable_list();
 
-    let albums_scroll = gtk::ScrolledWindow::builder()
+    // The fixed rows and albums scroll together so the sidebar fits short (720 px) screens;
+    // only the connection footer stays pinned.
+    let lists = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(12)
+        .build();
+    lists.append(&fixed_list);
+    lists.append(&albums_header);
+    lists.append(&albums_list);
+    let lists_scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vexpand(true)
-        .child(&albums_list)
+        .child(&lists)
         .build();
 
-    root.append(&fixed_list);
-    root.append(&albums_header);
-    root.append(&albums_scroll);
+    root.append(&lists_scroll);
     root.append(&connection_list);
 
     SidebarParts {

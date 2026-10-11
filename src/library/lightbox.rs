@@ -896,6 +896,12 @@ impl Lightbox {
 
         let initial_full = ui.ctx.config.read().data.library_preview_full_resolution;
         let actions = build_action_bar(initial_full);
+        // The full bar doesn't fit a 360 px window; Ctrl+0 still resets the zoom.
+        ui.split
+            .bind_property("collapsed", &actions.zoom_reset, "visible")
+            .invert_boolean()
+            .sync_create()
+            .build();
         let details = build_details_pane();
         let viewer = build_viewer(&picture, &actions);
         let body = build_split_view(&ui, &viewer, &details, &header.details_btn);

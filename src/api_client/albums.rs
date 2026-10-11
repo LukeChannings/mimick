@@ -41,12 +41,13 @@ impl ImmichApiClient {
         };
 
         let url = format!("{}/api/albums", base_url);
+        let api_key = self.settings.read().api_key.clone();
         log::info!("Fetching album list...");
 
         let result = self
             .client
             .get(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -157,6 +158,7 @@ impl ImmichApiClient {
             .await
             .ok_or_else(|| "No active connection".to_string())?;
         let url = format!("{}/api/albums", base_url);
+        let api_key = self.settings.read().api_key.clone();
 
         log::info!("Creating album: '{}'", album_name);
 
@@ -168,7 +170,7 @@ impl ImmichApiClient {
         match self
             .client
             .post(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&body)
@@ -280,6 +282,7 @@ impl ImmichApiClient {
             return out;
         };
         let url = format!("{}/api/assets/bulk-upload-check", base_url);
+        let api_key = self.settings.read().api_key.clone();
 
         for chunk in checksums.chunks(CHUNK) {
             let assets: Vec<_> = chunk
@@ -291,7 +294,7 @@ impl ImmichApiClient {
             match self
                 .client
                 .post(&url)
-                .headers(self.auth_headers())
+                .header("x-api-key", &api_key)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .json(&body)
@@ -323,6 +326,7 @@ impl ImmichApiClient {
     pub async fn find_existing_asset_id(&self, checksum: &str) -> Option<String> {
         let base_url = self.get_active_url().await?;
         let url = format!("{}/api/assets/bulk-upload-check", base_url);
+        let api_key = self.settings.read().api_key.clone();
         let body = serde_json::json!({
             "assets": [
                 {
@@ -335,7 +339,7 @@ impl ImmichApiClient {
         match self
             .client
             .post(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&body)
@@ -383,6 +387,7 @@ impl ImmichApiClient {
         };
 
         let url = format!("{}/api/albums/{}/assets", base_url, album_id);
+        let api_key = self.settings.read().api_key.clone();
         let body = serde_json::json!({ "ids": asset_ids });
 
         log::info!(
@@ -394,7 +399,7 @@ impl ImmichApiClient {
         match self
             .client
             .put(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&body)
@@ -433,10 +438,11 @@ impl ImmichApiClient {
     pub async fn count_albums_for_asset(&self, asset_id: &str) -> Option<usize> {
         let base_url = self.get_active_url().await?;
         let url = format!("{}/api/albums?assetId={}", base_url, asset_id);
+        let api_key = self.settings.read().api_key.clone();
         match self
             .client
             .get(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -473,11 +479,12 @@ impl ImmichApiClient {
             None => return false,
         };
         let url = format!("{}/api/albums/{}/assets", base_url, album_id);
+        let api_key = self.settings.read().api_key.clone();
         let body = serde_json::json!({ "ids": asset_ids });
         match self
             .client
             .delete(&url)
-            .headers(self.auth_headers())
+            .header("x-api-key", &api_key)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&body)
