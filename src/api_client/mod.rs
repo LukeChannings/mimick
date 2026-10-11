@@ -715,6 +715,34 @@ impl ImmichApiClient {
         header_map(&self.settings.read().api_key, token.as_deref())
     }
 
+    /// Send a JSON request to `path` and fail on a non-success status.
+    pub(super) async fn send_json(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<reqwest::Response, String> {
+        let base_url = self
+            .get_active_url()
+            .await
+            .ok_or_else(|| "No active connection".to_string())?;
+        let mut request = self
+            .client
+            .request(method, format!("{}{}", base_url, path))
+            .headers(self.auth_headers())
+            .header("Accept", "application/json")
+            .timeout(Duration::from_secs(15));
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        let resp = request.send().await.map_err(|err| err.to_string())?;
+        if !resp.status().is_success() {
+            return Err(format!("HTTP {}", resp.status()));
+        }
+        self.clear_issue().await;
+        Ok(resp)
+    }
+
     /// Retrieve the route label (LAN/WAN) for the currently active connection URL.
     pub async fn active_route_label(&self) -> Option<String> {
         let active = self.active_url.lock().await.clone()?;

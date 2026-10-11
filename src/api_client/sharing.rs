@@ -1,7 +1,5 @@
 //! Album sharing: album members, the user directory, and member roles.
 
-use std::time::Duration;
-
 use super::{ImmichApiClient, LibraryAlbum, UserSummary};
 
 /// Role a member has in a shared album.
@@ -39,47 +37,17 @@ fn add_users_body(members: &[(String, AlbumRole)]) -> serde_json::Value {
 }
 
 impl ImmichApiClient {
-    /// Send a JSON request to `path` and fail on a non-success status.
-    async fn send_sharing_request(
-        &self,
-        method: reqwest::Method,
-        path: &str,
-        body: Option<serde_json::Value>,
-    ) -> Result<reqwest::Response, String> {
-        let base_url = self
-            .get_active_url()
-            .await
-            .ok_or_else(|| "No active connection".to_string())?;
-        let mut request = self
-            .client
-            .request(method, format!("{}{}", base_url, path))
-            .headers(self.auth_headers())
-            .header("Accept", "application/json")
-            .timeout(Duration::from_secs(15));
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let resp = request.send().await.map_err(|err| err.to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
-        }
-        self.clear_issue().await;
-        Ok(resp)
-    }
-
     /// One album with its members (names and emails), without its assets.
     pub async fn fetch_album_detail(&self, album_id: &str) -> Result<LibraryAlbum, String> {
         let path = format!("/api/albums/{album_id}?withoutAssets=true");
-        let resp = self
-            .send_sharing_request(reqwest::Method::GET, &path, None)
-            .await?;
+        let resp = self.send_json(reqwest::Method::GET, &path, None).await?;
         resp.json().await.map_err(|err| err.to_string())
     }
 
     /// Everyone on the server the key can see (needs `user.read`).
     pub async fn list_users(&self) -> Result<Vec<UserSummary>, String> {
         let resp = self
-            .send_sharing_request(reqwest::Method::GET, "/api/users", None)
+            .send_json(reqwest::Method::GET, "/api/users", None)
             .await?;
         let mut users: Vec<UserSummary> = resp.json().await.map_err(|err| err.to_string())?;
         users.sort_by_key(|u| u.name.to_lowercase());
@@ -92,7 +60,7 @@ impl ImmichApiClient {
         members: &[(String, AlbumRole)],
     ) -> Result<(), String> {
         let path = format!("/api/albums/{album_id}/users");
-        self.send_sharing_request(reqwest::Method::PUT, &path, Some(add_users_body(members)))
+        self.send_json(reqwest::Method::PUT, &path, Some(add_users_body(members)))
             .await
             .map(|_| ())
     }
@@ -105,14 +73,14 @@ impl ImmichApiClient {
     ) -> Result<(), String> {
         let path = format!("/api/albums/{album_id}/user/{user_id}");
         let body = serde_json::json!({ "role": role.as_str() });
-        self.send_sharing_request(reqwest::Method::PUT, &path, Some(body))
+        self.send_json(reqwest::Method::PUT, &path, Some(body))
             .await
             .map(|_| ())
     }
 
     pub async fn remove_album_user(&self, album_id: &str, user_id: &str) -> Result<(), String> {
         let path = format!("/api/albums/{album_id}/user/{user_id}");
-        self.send_sharing_request(reqwest::Method::DELETE, &path, None)
+        self.send_json(reqwest::Method::DELETE, &path, None)
             .await
             .map(|_| ())
     }

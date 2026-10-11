@@ -1,7 +1,5 @@
 //! Shared links: public URLs for an album or a set of assets.
 
-use std::time::Duration;
-
 use super::ImmichApiClient;
 
 /// A shared link as returned by `GET /api/shared-links`.
@@ -123,37 +121,10 @@ pub fn share_url(base: &str, link: &SharedLink) -> String {
 }
 
 impl ImmichApiClient {
-    async fn send_shared_link_request(
-        &self,
-        method: reqwest::Method,
-        path: &str,
-        body: Option<serde_json::Value>,
-    ) -> Result<reqwest::Response, String> {
-        let base_url = self
-            .get_active_url()
-            .await
-            .ok_or_else(|| "No active connection".to_string())?;
-        let mut request = self
-            .client
-            .request(method, format!("{}{}", base_url, path))
-            .headers(self.auth_headers())
-            .header("Accept", "application/json")
-            .timeout(Duration::from_secs(15));
-        if let Some(body) = body {
-            request = request.json(&body);
-        }
-        let resp = request.send().await.map_err(|err| err.to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
-        }
-        self.clear_issue().await;
-        Ok(resp)
-    }
-
     /// The user's shared links, newest first.
     pub async fn fetch_shared_links(&self) -> Result<Vec<SharedLink>, String> {
         let resp = self
-            .send_shared_link_request(reqwest::Method::GET, "/api/shared-links", None)
+            .send_json(reqwest::Method::GET, "/api/shared-links", None)
             .await?;
         let mut links: Vec<SharedLink> = resp.json().await.map_err(|err| err.to_string())?;
         links.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -167,7 +138,7 @@ impl ImmichApiClient {
     ) -> Result<SharedLink, String> {
         let body = create_body(target, options);
         let resp = self
-            .send_shared_link_request(reqwest::Method::POST, "/api/shared-links", Some(body))
+            .send_json(reqwest::Method::POST, "/api/shared-links", Some(body))
             .await?;
         resp.json().await.map_err(|err| err.to_string())
     }
@@ -179,14 +150,14 @@ impl ImmichApiClient {
     ) -> Result<SharedLink, String> {
         let path = format!("/api/shared-links/{link_id}");
         let resp = self
-            .send_shared_link_request(reqwest::Method::PATCH, &path, Some(edit_body(options)))
+            .send_json(reqwest::Method::PATCH, &path, Some(edit_body(options)))
             .await?;
         resp.json().await.map_err(|err| err.to_string())
     }
 
     pub async fn delete_shared_link(&self, link_id: &str) -> Result<(), String> {
         let path = format!("/api/shared-links/{link_id}");
-        self.send_shared_link_request(reqwest::Method::DELETE, &path, None)
+        self.send_json(reqwest::Method::DELETE, &path, None)
             .await
             .map(|_| ())
     }
@@ -201,7 +172,7 @@ impl ImmichApiClient {
             external_domain: String,
         }
         let configured = match self
-            .send_shared_link_request(reqwest::Method::GET, "/api/server/config", None)
+            .send_json(reqwest::Method::GET, "/api/server/config", None)
             .await
         {
             Ok(resp) => resp
