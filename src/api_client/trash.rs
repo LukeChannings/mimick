@@ -54,11 +54,10 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let mut request = self
             .client
             .post(format!("{}{}", base_url, path))
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             // Emptying a large trash can take a while server-side.
             .timeout(Duration::from_secs(60));

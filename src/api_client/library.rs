@@ -28,13 +28,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/albums", base_url);
 
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -112,7 +111,6 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!(
             "{}/api/assets/{}/thumbnail?size={}",
             base_url,
@@ -123,7 +121,7 @@ impl ImmichApiClient {
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/octet-stream")
             .timeout(Duration::from_secs(10))
             .send()
@@ -161,12 +159,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/assets/{}", base_url, asset_id);
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -201,13 +198,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/assets/{}/original", base_url, asset_id);
 
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/octet-stream")
             .timeout(Duration::from_secs(300))
             .send()
@@ -254,12 +250,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/users/me", base_url);
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -283,12 +278,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/assets/{}", base_url, asset_id);
         match self
             .client
             .put(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(15))
             .json(update)
@@ -322,13 +316,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/assets", base_url);
         let body = delete_request_body(asset_ids, force);
         match self
             .client
             .delete(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(15))

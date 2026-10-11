@@ -22,6 +22,7 @@ use super::download::{
 };
 use super::favorites::{FavoriteHooks, toggle_favorite};
 use super::load_texture_oriented;
+use super::locked_folder;
 use super::trash_view;
 
 /// What the view that opened the menu does after its asset is trashed or edited.
@@ -173,18 +174,13 @@ fn append_manage_buttons(
         append_trash_mode_buttons(menu, ui, remote_id, hooks.on_trashed);
         return;
     }
+    if locked_folder::is_active(ui) {
+        append_locked_mode_buttons(menu, ui, remote_id, hooks.on_trashed);
+        return;
+    }
 
     append_favorite_button(menu, ui, item, &hooks);
-    let (ui_link, link_id) = (ui.clone(), remote_id.clone());
-    menu.add("Create Share Link…", false, move || {
-        super::shared_link_dialog::present(
-            ui_link.clone(),
-            super::shared_link_dialog::LinkDialogMode::Create(
-                crate::api_client::SharedLinkTarget::Assets(vec![link_id.clone()]),
-            ),
-            Rc::new(|| {}),
-        )
-    });
+    append_share_and_lock_buttons(menu, ui, &remote_id, hooks.on_trashed.clone());
     let (ui_edit, filename, on_edited) = (
         ui.clone(),
         item.property::<String>("filename"),
@@ -207,6 +203,29 @@ fn append_manage_buttons(
             let on_trashed = on_trashed.clone();
             confirm_trash(ui_trash.clone(), vec![target], 0, move || on_trashed());
         }
+    });
+}
+
+/// "Create Share Link…" and "Move to Locked Folder"; `on_locked` runs once the asset moves.
+fn append_share_and_lock_buttons(
+    menu: &Menu,
+    ui: &Rc<LibraryWindowUi>,
+    remote_id: &str,
+    on_locked: Rc<dyn Fn()>,
+) {
+    let (ui_link, link_id) = (ui.clone(), remote_id.to_string());
+    menu.add("Create Share Link…", false, move || {
+        super::shared_link_dialog::present(
+            ui_link.clone(),
+            super::shared_link_dialog::LinkDialogMode::Create(
+                crate::api_client::SharedLinkTarget::Assets(vec![link_id.clone()]),
+            ),
+            Rc::new(|| {}),
+        )
+    });
+    let (ui_lock, lock_id) = (ui.clone(), remote_id.to_string());
+    menu.add("Move to Locked Folder", false, move || {
+        locked_folder::move_in(&ui_lock, vec![lock_id.clone()], on_locked.clone())
     });
 }
 
@@ -246,6 +265,28 @@ fn append_trash_mode_buttons(
     menu.add("Restore", false, move || {
         let on_restored = on_restored.clone();
         trash_view::restore(ui_restore.clone(), vec![id.clone()], move || on_restored());
+    });
+    let ui_delete = ui.clone();
+    menu.add("Delete Permanently", true, move || {
+        let on_removed = on_removed.clone();
+        trash_view::confirm_delete_permanently(
+            ui_delete.clone(),
+            vec![remote_id.clone()],
+            move || on_removed(),
+        );
+    });
+}
+
+/// Locked Folder: move the asset back to the timeline, or delete it for good.
+fn append_locked_mode_buttons(
+    menu: &Menu,
+    ui: &Rc<LibraryWindowUi>,
+    remote_id: String,
+    on_removed: Rc<dyn Fn()>,
+) {
+    let (ui_move, id, on_moved) = (ui.clone(), remote_id.clone(), on_removed.clone());
+    menu.add("Move Out of Locked Folder", false, move || {
+        locked_folder::move_out(ui_move.clone(), vec![id.clone()], on_moved.clone())
     });
     let ui_delete = ui.clone();
     menu.add("Delete Permanently", true, move || {

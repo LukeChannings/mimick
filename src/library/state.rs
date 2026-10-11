@@ -59,6 +59,8 @@ pub enum LibrarySource {
     Trash,
     /// Assets marked as favorites.
     Favorites,
+    /// Assets in the Locked Folder; needs an unlocked login session.
+    LockedFolder,
 }
 
 impl LibrarySource {

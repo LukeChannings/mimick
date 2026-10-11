@@ -7,6 +7,7 @@
 
 use parking_lot::RwLock;
 use reqwest::Client;
+use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderName, HeaderValue};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ mod albums;
 mod errors;
 mod library;
 mod search;
+mod session;
 mod sharing;
 pub use sharing::AlbumRole;
 mod shared_links;
@@ -646,6 +648,26 @@ pub struct ImmichApiClient {
     albums_fetched: Mutex<bool>,
     /// Semaphore guarding maximum concurrent thumbnail downloads.
     thumbnail_semaphore: Arc<Semaphore>,
+    /// Login session token used instead of the API key while the Locked Folder is open.
+    /// Kept in memory only; never persisted.
+    session_token: RwLock<Option<String>>,
+}
+
+/// Pick the auth header: a Bearer session token while one is set, otherwise the API key.
+fn auth_header(api_key: &str, session_token: Option<&str>) -> (HeaderName, String) {
+    match session_token {
+        Some(token) => (AUTHORIZATION, format!("Bearer {token}")),
+        None => (HeaderName::from_static("x-api-key"), api_key.to_string()),
+    }
+}
+
+fn header_map(api_key: &str, session_token: Option<&str>) -> HeaderMap {
+    let (name, value) = auth_header(api_key, session_token);
+    let mut headers = HeaderMap::new();
+    if let Ok(value) = HeaderValue::from_str(&value) {
+        headers.insert(name, value);
+    }
+    headers
 }
 
 impl ImmichApiClient {
@@ -683,7 +705,14 @@ impl ImmichApiClient {
             last_successful_check: Mutex::new(None),
             albums_fetched: Mutex::new(false),
             thumbnail_semaphore: Arc::new(Semaphore::new(8)),
+            session_token: RwLock::new(None),
         }
+    }
+
+    /// Auth headers for every Immich request, honouring an active login session.
+    pub(super) fn auth_headers(&self) -> HeaderMap {
+        let token = self.session_token.read().clone();
+        header_map(&self.settings.read().api_key, token.as_deref())
     }
 
     /// Retrieve the route label (LAN/WAN) for the currently active connection URL.
@@ -710,6 +739,7 @@ impl ImmichApiClient {
             settings.external_url = external_url.trim_end_matches('/').to_string();
             settings.api_key = api_key;
         }
+        *self.session_token.write() = None;
 
         *self.active_url.lock().await = None;
         self.refresh_album_cache().await;
@@ -724,11 +754,6 @@ impl ImmichApiClient {
     /// Clear the active API issue.
     pub(super) async fn clear_issue(&self) {
         *self.last_issue.lock().await = None;
-    }
-
-    /// Retrieve a snapshot copy of the current configuration settings.
-    pub(super) fn settings_snapshot(&self) -> ApiClientSettings {
-        self.settings.read().clone()
     }
 
     /// Retrieve the LAN/WAN/Custom route label matching a specific URL.
@@ -1245,6 +1270,17 @@ mod tests {
             serde_json::from_value(serde_json::json!({ "version": "v1.0.0" })).unwrap();
         assert_eq!(minimal.version, "v1.0.0");
         assert!(minimal.ffmpeg.is_none());
+    }
+
+    #[test]
+    fn auth_header_prefers_session_token_over_api_key() {
+        let (name, value) = auth_header("key", None);
+        assert_eq!((name.as_str(), value.as_str()), ("x-api-key", "key"));
+        let (name, value) = auth_header("key", Some("tok"));
+        assert_eq!(
+            (name.as_str(), value.as_str()),
+            ("authorization", "Bearer tok")
+        );
     }
 
     #[test]

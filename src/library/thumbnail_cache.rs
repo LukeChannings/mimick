@@ -301,19 +301,26 @@ impl ThumbnailCache {
             return Err("cancelled".to_string());
         }
         let bytes = self.api_client.fetch_thumbnail(asset_id, size).await?;
-        let cache_dir = self.cache_dir.clone();
-        let cache_file_for_write = cache_file.clone();
-        let bytes_for_write = bytes.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            let _ = std::fs::create_dir_all(&cache_dir);
-            let _ = std::fs::write(&cache_file_for_write, &bytes_for_write);
-        })
-        .await;
+        self.write_disk_cache(cache_file, bytes.clone()).await;
         let texture = decode_to_scaled_texture(bytes, target_dim_for_bucket(size))
             .await
             .map_err(|err| err.to_string())?;
         self.memory.lock().insert(key.to_string(), texture.clone());
         Ok(texture)
+    }
+
+    /// Save fetched thumbnail bytes to the disk cache, except while the Locked Folder is
+    /// unlocked, so locked photos never persist.
+    async fn write_disk_cache(&self, cache_file: PathBuf, bytes: Vec<u8>) {
+        if self.api_client.has_session() {
+            return;
+        }
+        let cache_dir = self.cache_dir.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            let _ = std::fs::create_dir_all(&cache_dir);
+            let _ = std::fs::write(&cache_file, &bytes);
+        })
+        .await;
     }
 
     /// Asynchronously generate a local file thumbnail with cancellable hook support.

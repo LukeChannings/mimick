@@ -20,7 +20,6 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!(
             "{}/api/people?withHidden={}",
             base_url,
@@ -29,7 +28,7 @@ impl ImmichApiClient {
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -54,12 +53,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/search/explore", base_url);
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -86,7 +84,6 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/search/metadata", base_url);
 
         let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -104,7 +101,7 @@ impl ImmichApiClient {
             let resp = match self
                 .client
                 .post(&url)
-                .header("x-api-key", &settings.api_key)
+                .headers(self.auth_headers())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .json(&body)
@@ -158,12 +155,11 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/people/{}/thumbnail", base_url, person_id);
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/octet-stream")
             .timeout(Duration::from_secs(10))
             .send()
@@ -305,13 +301,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/assets/statistics", base_url);
 
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -352,13 +347,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/server/statistics", base_url);
 
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -380,11 +374,10 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let resp = self
             .client
             .get(format!("{}/api/server/version-history", base_url))
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -404,13 +397,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}/api/server/about", base_url);
 
         match self
             .client
             .get(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()
@@ -458,13 +450,12 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let url = format!("{}{}", base_url, endpoint);
 
         match self
             .client
             .post(&url)
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .json(&body)

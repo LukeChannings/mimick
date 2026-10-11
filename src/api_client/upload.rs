@@ -345,12 +345,11 @@ impl ImmichApiClient {
         progress: Option<TransferProgressCallback>,
     ) -> Option<String> {
         let url = format!("{}/api/assets", base_url);
-        let api_key = self.settings.read().api_key.clone();
 
         match self
             .client
             .post(&url)
-            .header("x-api-key", &api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .multipart(form)
             .send()

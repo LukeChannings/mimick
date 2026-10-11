@@ -28,6 +28,7 @@ The window uses a sidebar + content split.
 - **Albums** — album landing page
 - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
+- **Locked Folder** — assets hidden behind your PIN; unlocking asks you to sign in (see [Locked Folder](#locked-folder))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
@@ -311,6 +312,21 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 - The dialog sets a **Description**, when the link **Expires** (Never, 1 hour, 1 day, 7 days, 30 days), an optional **Password**, and whether visitors can download originals, upload into the album (album links only), and see metadata. **Create** copies the URL to the clipboard.
 - The **Shared Links** sidebar entry lists every link with its album name or item count, description, expiry, and restrictions. Each row has **Copy link**, **Edit** (the same dialog; leave the password empty to keep it), and **Delete** (asks first).
 - The URL uses the server's **External domain** (Immich Administration → Settings → Server) when set, and otherwise the address Mimick is connected through. Requires `sharedLink.read`, `sharedLink.create`, `sharedLink.update`, and `sharedLink.delete`.
+
+---
+
+## Locked Folder
+
+- Immich only unlocks the Locked Folder for a signed-in session, not for an API key. So clicking **Locked Folder** asks for your Immich **email** (prefilled), **password**, and **PIN**.
+  - If the account has no PIN yet, the PIN you enter becomes it.
+  - Accounts that sign in only through OAuth have no password, so Mimick can't open their Locked Folder; use Immich web or mobile instead.
+  - You must sign in as the account the API key belongs to, because the session replaces the API key for all of Mimick's requests while unlocked.
+- While unlocked, a bar above the grid shows when it locks again, with a **Lock** button. It locks automatically after 15 minutes (or sooner if Immich's unlock ends first), and when you close the library window. Locking signs the session out, and Mimick goes back to the API key.
+- Nothing you type is saved: the session token lives in memory only, never in the config or keyring. Locked thumbnails are kept in memory and not written to the thumbnail disk cache. Videos can't be played from here, because the player needs a copy on disk.
+- Right-click an asset:
+  - In the Locked Folder: **Move Out of Locked Folder** (back to the timeline) or **Delete Permanently** (asks first).
+  - Elsewhere: **Move to Locked Folder** (asks you to sign in when locked).
+- The API key needs `user.read` to check which account it belongs to.
 
 ---
 

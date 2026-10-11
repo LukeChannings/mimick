@@ -97,6 +97,12 @@ pub fn build_sidebar() -> SidebarParts {
         "favorites",
     ));
     fixed_list.append(&action_row(
+        "Locked Folder",
+        "Unlock with your password and PIN",
+        "changes-prevent-symbolic",
+        "locked",
+    ));
+    fixed_list.append(&action_row(
         "Trash",
         "Restore or permanently delete",
         "user-trash-symbolic",

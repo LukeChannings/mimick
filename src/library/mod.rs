@@ -62,6 +62,8 @@ mod context_menu;
 mod controls;
 mod download;
 mod lightbox;
+mod locked_dialog;
+mod locked_folder;
 pub mod search_filters;
 pub mod search_view;
 mod server_stats_dialog;
@@ -126,6 +128,8 @@ struct LibraryWindowUi {
     select_toggle: gtk::ToggleButton,
     bulk_bar: gtk::Revealer,
     trash: trash_view::TrashControls,
+    locked: locked_folder::LockedControls,
+    locked_session: RefCell<Option<locked_folder::LockedSession>>,
     bulk_count_label: gtk::Label,
     album_link_row: libadwaita::ActionRow,
     album_link_button: gtk::Button,
@@ -158,6 +162,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
     actions::connect_bulk_share_link(ui.clone(), &bulk_share_link);
     trash_view::connect_trash_controls(ui.clone());
+    locked_folder::connect_locked_controls(&ui);
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
     connect_grid_handlers(ui.clone());
@@ -761,6 +766,7 @@ fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     // Source-mode (Remote/Local/Unified) only relevant inside an album.
     ui.source_revealer.set_reveal_child(in_album);
     trash_view::set_trash_mode(ui, matches!(source, LibrarySource::Trash));
+    locked_folder::set_locked_mode(ui, matches!(source, LibrarySource::LockedFolder));
 
     if in_album {
         ui.upload_button.set_tooltip_text(Some("Upload to album"));
@@ -1088,6 +1094,19 @@ async fn fetch_source_page(
     }
 }
 
+/// Fixed search filters behind the Favorites, Locked Folder, and Trash views.
+fn view_filters(source: &LibrarySource) -> MetadataSearchFilters {
+    match source {
+        LibrarySource::Favorites => MetadataSearchFilters {
+            is_favorite: Some(true),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::LockedFolder => MetadataSearchFilters::locked(),
+        LibrarySource::Trash => MetadataSearchFilters::trashed(),
+        _ => MetadataSearchFilters::default(),
+    }
+}
+
 async fn fetch_remote_page(
     api: &crate::api_client::ImmichApiClient,
     source: LibrarySource,
@@ -1111,19 +1130,10 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
-        LibrarySource::Favorites => {
+        LibrarySource::Favorites | LibrarySource::LockedFolder | LibrarySource::Trash => {
             let filters = MetadataSearchFilters {
                 order,
-                is_favorite: Some(true),
-                ..MetadataSearchFilters::default()
-            };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
-        }
-        LibrarySource::Trash => {
-            let filters = MetadataSearchFilters {
-                order,
-                ..MetadataSearchFilters::trashed()
+                ..view_filters(&source)
             };
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
@@ -1324,6 +1334,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Trash => {
             select_fixed_row(&ui.sidebar.fixed_list, "trash");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::LockedFolder => {
+            select_fixed_row(&ui.sidebar.fixed_list, "locked");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Album { id, .. }
@@ -1674,4 +1688,21 @@ fn show_library_permission_error(window: &libadwaita::ApplicationWindow) {
         .build();
     dialog.add_response("close", "Close");
     dialog.present(Some(window));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_filters_match_each_fixed_view() {
+        let favorites = view_filters(&LibrarySource::Favorites);
+        assert_eq!(favorites.is_favorite, Some(true));
+        let locked = view_filters(&LibrarySource::LockedFolder);
+        assert_eq!(locked.visibility.as_deref(), Some("locked"));
+        assert_eq!(
+            view_filters(&LibrarySource::Trash),
+            MetadataSearchFilters::trashed()
+        );
+    }
 }

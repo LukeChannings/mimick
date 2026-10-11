@@ -133,11 +133,10 @@ impl ImmichApiClient {
             .get_active_url()
             .await
             .ok_or_else(|| "No active connection".to_string())?;
-        let settings = self.settings_snapshot();
         let mut request = self
             .client
             .request(method, format!("{}{}", base_url, path))
-            .header("x-api-key", &settings.api_key)
+            .headers(self.auth_headers())
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(15));
         if let Some(body) = body {
