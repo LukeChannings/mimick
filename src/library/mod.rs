@@ -13,7 +13,7 @@ use glib::clone;
 use gtk::prelude::*;
 use libadwaita::prelude::*;
 
-use crate::api_client::{LibraryAsset, MetadataSearchFilters, SortOrder, Tag};
+use crate::api_client::{LibraryAsset, MetadataSearchFilters, SharedLinkTarget, SortOrder, Tag};
 use crate::app_context::AppContext;
 use crate::library::albums_view::{AlbumClick, AlbumsViewParts, populate_albums};
 use crate::library::explore_view::ExploreViewParts;
@@ -43,6 +43,7 @@ pub mod albums_view;
 pub mod asset_model;
 pub mod asset_object;
 pub mod explore_view;
+mod favorites;
 pub mod local_exif;
 pub mod local_source;
 pub mod masonry;
@@ -51,8 +52,10 @@ pub mod state;
 pub mod style;
 pub mod thumbnail_cache;
 
+mod about_dialog;
 mod actions;
 mod album_link;
+mod album_share_dialog;
 mod asset_edit;
 mod asset_tags;
 mod context_menu;
@@ -62,6 +65,8 @@ mod lightbox;
 pub mod search_filters;
 pub mod search_view;
 mod server_stats_dialog;
+mod shared_link_dialog;
+mod shared_links_view;
 pub mod staging_view;
 mod trash_view;
 mod upload_picker;
@@ -101,6 +106,7 @@ struct LibraryWindowUi {
     grid: GridViewParts,
     explore: ExploreViewParts,
     albums: AlbumsViewParts,
+    shared_links: shared_links_view::SharedLinksView,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -138,6 +144,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     let window = parts.window.clone();
     let album_link_listbox = parts.content.album_link.listbox.clone();
     let bulk = &parts.content.bulk;
+    let bulk_share_link = bulk.share_link.clone();
     let (bulk_delete, bulk_download, bulk_clear) = (
         bulk.delete.clone(),
         bulk.download.clone(),
@@ -145,24 +152,11 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     );
     let ui = Rc::new(LibraryWindowUi::from_parts(ctx, app, parts));
 
-    *ui.grid.context_menu_handler.borrow_mut() = Some(Box::new(clone!(
-        #[strong]
-        ui,
-        move |position, x, y| {
-            show_asset_context_menu(
-                ui.clone(),
-                &ui.grid.canvas,
-                position,
-                x,
-                y,
-                AssetMenuHooks::for_grid(&ui),
-            );
-        }
-    )));
-
+    connect_menus(ui.clone());
     connect_album_link_row(ui.clone(), album_link_listbox);
     connect_select_mode(ui.clone(), ui.select_toggle.clone());
     connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
+    actions::connect_bulk_share_link(ui.clone(), &bulk_share_link);
     trash_view::connect_trash_controls(ui.clone());
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
@@ -179,6 +173,39 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
 
     bootstrap_window(ui);
     window.present();
+}
+
+/// Wire the grid right-click menu and the album tile sharing actions.
+fn connect_menus(ui: Rc<LibraryWindowUi>) {
+    *ui.grid.context_menu_handler.borrow_mut() = Some(Box::new(clone!(
+        #[strong]
+        ui,
+        move |position, x, y| {
+            show_asset_context_menu(
+                ui.clone(),
+                &ui.grid.canvas,
+                position,
+                x,
+                y,
+                AssetMenuHooks::for_grid(&ui),
+            );
+        }
+    )));
+
+    let ui_for_share = ui.clone();
+    albums_view::set_share_handler(
+        &ui.albums,
+        Rc::new(move |album, action| match action {
+            albums_view::AlbumAction::Share => {
+                album_share_dialog::present(ui_for_share.clone(), album)
+            }
+            albums_view::AlbumAction::CreateLink => shared_link_dialog::present(
+                ui_for_share.clone(),
+                shared_link_dialog::LinkDialogMode::Create(SharedLinkTarget::Album(album.id)),
+                Rc::new(|| {}),
+            ),
+        }),
+    );
 }
 
 /// Bootstrap initial data loading and background tasks for the library window.
@@ -554,17 +581,26 @@ fn spawn_transfer_poll_loop(ui: Rc<LibraryWindowUi>) {
 
 /// Fetch current logged-in API user ID and store it in app context.
 fn fetch_current_user(ui: Rc<LibraryWindowUi>) {
-    if ui.ctx.current_user_id.lock().is_some() {
-        return;
-    }
     glib::MainContext::default().spawn_local(async move {
-        match ui.ctx.api_client.fetch_current_user_id().await {
-            Ok(id) => {
-                *ui.ctx.current_user_id.lock() = Some(id);
-            }
-            Err(err) => log::warn!("Could not fetch current user id: {}", err),
-        }
+        ensure_current_user_id(&ui.ctx).await;
     });
+}
+
+/// The API key's user id, fetched and cached on first use.
+async fn ensure_current_user_id(ctx: &AppContext) -> Option<String> {
+    if let Some(id) = ctx.current_user_id.lock().clone() {
+        return Some(id);
+    }
+    match ctx.api_client.fetch_current_user_id().await {
+        Ok(id) => {
+            *ctx.current_user_id.lock() = Some(id.clone());
+            Some(id)
+        }
+        Err(err) => {
+            log::warn!("Could not fetch current user id: {}", err);
+            None
+        }
+    }
 }
 
 /// Connect action handlers to the album creation widgets.
@@ -625,6 +661,8 @@ fn prompt_create_album(ui: Rc<LibraryWindowUi>) {
 /// stack child to "albums" or "error".
 fn refresh_albums_view(ui: Rc<LibraryWindowUi>) {
     glib::MainContext::default().spawn_local(async move {
+        // Albums are split into yours and shared-with-you by owner, so the id must be known.
+        ensure_current_user_id(&ui.ctx).await;
         match ui.ctx.api_client.fetch_library_albums().await {
             Ok(albums) => {
                 let on_click = album_click_handler(ui.clone());
@@ -1084,6 +1122,15 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
+        LibrarySource::Favorites => {
+            let filters = MetadataSearchFilters {
+                order,
+                is_favorite: Some(true),
+                ..MetadataSearchFilters::default()
+            };
+            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
+                .await
+        }
         LibrarySource::Trash => {
             let filters = MetadataSearchFilters {
                 order,
@@ -1280,6 +1327,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Explore => {
             select_fixed_row(&ui.sidebar.fixed_list, "explore");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::Favorites => {
+            select_fixed_row(&ui.sidebar.fixed_list, "favorites");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Trash => {
@@ -1540,6 +1591,7 @@ fn local_to_library_asset(local: LocalAsset) -> LibraryAsset {
         height: None,
         checksum: None,
         exif_info: None,
+        is_favorite: false,
     }
 }
 

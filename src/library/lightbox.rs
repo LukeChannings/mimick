@@ -23,6 +23,7 @@ use super::download::{
     begin_download_session, finish_download_item, open_local_with_default_app, spawn_video_handoff,
     start_download, track_download_item,
 };
+use super::favorites::{FavoriteHooks, heart_icon, heart_tooltip, toggle_favorite};
 use super::trash_view;
 use super::{LOCAL_ID_PREFIX, LibraryWindowUi, load_source_page, load_texture_oriented};
 
@@ -426,6 +427,7 @@ struct AssetInfo {
     mime: String,
     created: String,
     sync_state: u32,
+    favorite: bool,
 }
 
 impl AssetInfo {
@@ -437,6 +439,7 @@ impl AssetInfo {
             mime: item.property("mime-type"),
             created: item.property("created-at"),
             sync_state: item.property("sync-state"),
+            favorite: item.is_favorite(),
         }
     }
 
@@ -566,6 +569,7 @@ struct ActionBar {
     bar: gtk::Box,
     resolution_toggle: gtk::ToggleButton,
     download: gtk::Button,
+    favorite: gtk::Button,
     trash: gtk::Button,
     zoom_group: gtk::Box,
     zoom_in: gtk::Button,
@@ -736,6 +740,7 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
         .build();
     let download = icon_button("mimick-download-symbolic", "Download asset");
     let trash = icon_button("user-trash-symbolic", "Move to trash (Delete)");
+    let favorite = icon_button(heart_icon(false), heart_tooltip(false));
     let zoom_out = icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)");
     let zoom_in = icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)");
     let zoom_reset = gtk::Button::builder()
@@ -760,12 +765,14 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
     bar.append(&zoom_group);
     bar.append(&spacer);
     bar.append(&resolution_toggle);
+    bar.append(&favorite);
     bar.append(&download);
     bar.append(&trash);
     ActionBar {
         bar,
         resolution_toggle,
         download,
+        favorite,
         trash,
         zoom_group,
         zoom_in,
@@ -889,6 +896,12 @@ impl Lightbox {
 
         let initial_full = ui.ctx.config.read().data.library_preview_full_resolution;
         let actions = build_action_bar(initial_full);
+        // The full bar doesn't fit a 360 px window; Ctrl+0 still resets the zoom.
+        ui.split
+            .bind_property("collapsed", &actions.zoom_reset, "visible")
+            .invert_boolean()
+            .sync_create()
+            .build();
         let details = build_details_pane();
         let viewer = build_viewer(&picture, &actions);
         let body = build_split_view(&ui, &viewer, &details, &header.details_btn);
@@ -1141,6 +1154,10 @@ impl Lightbox {
             .trash
             .connect_clicked(move |_| lb.confirm_trash_current());
         let lb = self.clone();
+        self.actions
+            .favorite
+            .connect_clicked(move |_| lb.toggle_current_favorite());
+        let lb = self.clone();
         self.details
             .edit_btn
             .connect_clicked(move |_| lb.edit_current());
@@ -1222,6 +1239,27 @@ impl Lightbox {
         );
     }
 
+    /// Heart button / F key. Un-favoriting inside the Favorites view drops the photo
+    /// from the grid, so the lightbox then moves on as it does after a trash.
+    fn toggle_current_favorite(self: &Rc<Self>) {
+        let Some(item) = self.current_item() else {
+            return;
+        };
+        let (lb_change, lb_removed) = (self.clone(), self.clone());
+        let hooks = FavoriteHooks {
+            on_change: Rc::new(move |favorite| lb_change.show_heart(favorite)),
+            on_removed: Rc::new(move || lb_removed.after_trash()),
+        };
+        toggle_favorite(&self.ui, &item, hooks);
+    }
+
+    fn show_heart(&self, favorite: bool) {
+        self.actions.favorite.set_icon_name(heart_icon(favorite));
+        self.actions
+            .favorite
+            .set_tooltip_text(Some(heart_tooltip(favorite)));
+    }
+
     fn after_edit(self: &Rc<Self>, date_changed: bool) {
         if date_changed {
             self.reload_on_close.set(true);
@@ -1265,6 +1303,7 @@ impl Lightbox {
                 .details_btn
                 .set_active(!self.header.details_btn.is_active()),
             (false, gtk::gdk::Key::Delete) => self.confirm_trash_current(),
+            (false, gtk::gdk::Key::f) | (false, gtk::gdk::Key::F) => self.toggle_current_favorite(),
             (false, gtk::gdk::Key::Escape) => {
                 self.ui.nav.pop();
             }
@@ -1430,6 +1469,8 @@ impl Lightbox {
         let on_server = !info.asset_id.starts_with(LOCAL_ID_PREFIX);
         let in_trash = trash_view::is_trash_active(&self.ui);
         self.actions.trash.set_visible(on_server && !in_trash);
+        self.actions.favorite.set_visible(on_server && !in_trash);
+        self.show_heart(info.favorite);
         self.details.edit_btn.set_visible(on_server && !in_trash);
         self.actions.zoom_group.set_visible(!info.is_video());
 

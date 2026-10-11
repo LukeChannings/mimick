@@ -59,15 +59,21 @@ fn connect_window_actions(ui: &Rc<LibraryWindowUi>) {
     ));
     ui.window.add_action(&action_refresh);
 
-    for row in [&ui.sidebar.connection_row, &ui.sidebar.server_row] {
-        row.connect_activated(clone!(
-            #[strong]
-            ui,
-            move |_| {
-                super::server_stats_dialog::present(ui.ctx.clone(), &ui.window);
-            }
-        ));
-    }
+    // Connection row: usage statistics. Server row: version/build details.
+    ui.sidebar.connection_row.connect_activated(clone!(
+        #[strong]
+        ui,
+        move |_| {
+            super::server_stats_dialog::present(ui.ctx.clone(), &ui.window);
+        }
+    ));
+    ui.sidebar.server_row.connect_activated(clone!(
+        #[strong]
+        ui,
+        move |_| {
+            super::about_dialog::present(ui.ctx.clone(), &ui.window);
+        }
+    ));
 }
 
 /// Upload and back buttons, plus the Alt+Left and F5 shortcuts.
@@ -322,18 +328,10 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                 }
                 "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
                 "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
-                "albums" => {
-                    ui.album_link_row.set_visible(false);
-                    if let Some(parent) = ui.album_link_row.parent() {
-                        parent.set_visible(false);
-                    }
-                    if ui.albums.populated.get() {
-                        ui.content_stack.set_visible_child_name("albums");
-                    } else {
-                        ui.content_stack.set_visible_child_name("loading");
-                        refresh_albums_view(ui.clone());
-                    }
-                }
+                "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
+                "albums" => show_albums_page(&ui, false),
+                "shared-albums" => show_albums_page(&ui, true),
+                "shared-links" => super::shared_links_view::show(&ui),
                 _ => {}
             }
             auto_hide_sidebar(&ui);
@@ -393,6 +391,21 @@ pub(super) fn navigate_back(ui: Rc<LibraryWindowUi>) -> bool {
 /// `reload_sidebar` programmatic re-selection doesn't loop into another
 /// fetch -- but only when the content stack is already showing the current
 /// source, since the Albums grid moves the stack without changing source.
+/// Show the Albums page, or its Shared Albums variant.
+fn show_albums_page(ui: &Rc<LibraryWindowUi>, shared_only: bool) {
+    ui.album_link_row.set_visible(false);
+    if let Some(parent) = ui.album_link_row.parent() {
+        parent.set_visible(false);
+    }
+    super::albums_view::set_shared_only(&ui.albums, shared_only);
+    if ui.albums.populated.get() {
+        ui.content_stack.set_visible_child_name("albums");
+    } else {
+        ui.content_stack.set_visible_child_name("loading");
+        refresh_albums_view(ui.clone());
+    }
+}
+
 pub(super) fn sidebar_dispatch(ui: Rc<LibraryWindowUi>, source: LibrarySource) {
     let on_albums_grid = ui.content_stack.visible_child_name().as_deref() == Some("albums");
     if !on_albums_grid && ui.ctx.library_state.lock().source == source {

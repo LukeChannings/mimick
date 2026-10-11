@@ -16,6 +16,90 @@ pub struct SidebarParts {
     pub albums_list: gtk::ListBox,
 }
 
+/// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
+const FIXED_ROWS: [(&str, &str, &str, &str); 8] = [
+    (
+        "Photos",
+        "Timeline of every photo and video",
+        "image-x-generic-symbolic",
+        "photos",
+    ),
+    (
+        "Search",
+        "Find photos, videos, and text",
+        "system-search-symbolic",
+        "search",
+    ),
+    (
+        "Explore",
+        "People, places, and things",
+        "view-grid-symbolic",
+        "explore",
+    ),
+    (
+        "Albums",
+        "Recent, owned, and shared",
+        "folder-pictures-symbolic",
+        "albums",
+    ),
+    (
+        "Shared Albums",
+        "Shared with you and by you",
+        "folder-publicshare-symbolic",
+        "shared-albums",
+    ),
+    (
+        "Shared Links",
+        "Public links you've created",
+        "emblem-shared-symbolic",
+        "shared-links",
+    ),
+    (
+        "Favorites",
+        "Photos and videos you've marked",
+        "mimick-heart-filled-symbolic",
+        "favorites",
+    ),
+    (
+        "Trash",
+        "Restore or permanently delete",
+        "user-trash-symbolic",
+        "trash",
+    ),
+];
+
+/// Connection and server rows at the bottom of the sidebar, in their own list.
+fn build_footer() -> (gtk::ListBox, libadwaita::ActionRow, libadwaita::ActionRow) {
+    let connection_row = footer_row("Connection", "Offline");
+    let server_row = footer_row("Server", "Statistics unavailable");
+    let list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(vec!["boxed-list".to_string()])
+        .build();
+    list.append(&connection_row);
+    list.append(&server_row);
+    (list, connection_row, server_row)
+}
+
+/// Single-line activatable row for the connection/server footer.
+fn footer_row(title: &str, subtitle: &str) -> libadwaita::ActionRow {
+    libadwaita::ActionRow::builder()
+        .title(title)
+        .subtitle(subtitle)
+        .title_lines(1)
+        .subtitle_lines(1)
+        .activatable(true)
+        .build()
+}
+
+/// Single-selection boxed list for the fixed entries and the album rows.
+fn selectable_list() -> gtk::ListBox {
+    gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .css_classes(vec!["boxed-list".to_string()])
+        .build()
+}
+
 /// Construct the hierarchical side navigation sidebar panel.
 pub fn build_sidebar() -> SidebarParts {
     let root = gtk::Box::builder()
@@ -28,62 +112,11 @@ pub fn build_sidebar() -> SidebarParts {
         .width_request(200)
         .build();
 
-    let fixed_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::Single)
-        .css_classes(vec!["boxed-list".to_string()])
-        .build();
-
-    let connection_row = libadwaita::ActionRow::builder()
-        .title("Connection")
-        .subtitle("Offline")
-        .title_lines(1)
-        .subtitle_lines(1)
-        .activatable(true)
-        .build();
-    let server_row = libadwaita::ActionRow::builder()
-        .title("Server")
-        .subtitle("Statistics unavailable")
-        .title_lines(1)
-        .subtitle_lines(1)
-        .activatable(true)
-        .build();
-    let connection_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(vec!["boxed-list".to_string()])
-        .build();
-    connection_list.append(&connection_row);
-    connection_list.append(&server_row);
-
-    fixed_list.append(&action_row(
-        "Photos",
-        "Timeline of every photo and video",
-        "image-x-generic-symbolic",
-        "photos",
-    ));
-    fixed_list.append(&action_row(
-        "Search",
-        "Find photos, videos, and text",
-        "system-search-symbolic",
-        "search",
-    ));
-    fixed_list.append(&action_row(
-        "Explore",
-        "People, places, and things",
-        "view-grid-symbolic",
-        "explore",
-    ));
-    fixed_list.append(&action_row(
-        "Albums",
-        "Recent, owned, and shared",
-        "folder-pictures-symbolic",
-        "albums",
-    ));
-    fixed_list.append(&action_row(
-        "Trash",
-        "Restore or permanently delete",
-        "user-trash-symbolic",
-        "trash",
-    ));
+    let fixed_list = selectable_list();
+    let (connection_list, connection_row, server_row) = build_footer();
+    for (title, subtitle, icon, key) in FIXED_ROWS {
+        fixed_list.append(&action_row(title, subtitle, icon, key));
+    }
 
     let albums_header = gtk::Label::builder()
         .label("Albums")
@@ -92,20 +125,24 @@ pub fn build_sidebar() -> SidebarParts {
         .margin_top(6)
         .build();
 
-    let albums_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::Single)
-        .css_classes(vec!["boxed-list".to_string()])
-        .build();
+    let albums_list = selectable_list();
 
-    let albums_scroll = gtk::ScrolledWindow::builder()
+    // The fixed rows and albums scroll together so the sidebar fits short (720 px) screens;
+    // only the connection footer stays pinned.
+    let lists = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(12)
+        .build();
+    lists.append(&fixed_list);
+    lists.append(&albums_header);
+    lists.append(&albums_list);
+    let lists_scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vexpand(true)
-        .child(&albums_list)
+        .child(&lists)
         .build();
 
-    root.append(&fixed_list);
-    root.append(&albums_header);
-    root.append(&albums_scroll);
+    root.append(&lists_scroll);
     root.append(&connection_list);
 
     SidebarParts {

@@ -109,6 +109,8 @@ mod imp {
         pub permission_warned: Cell<bool>,
         /// Cached video badge icon paintable, resolved lazily from the icon theme.
         pub video_icon: OnceCell<gdk4::Paintable>,
+        /// Cached favorite heart icon, painted on favorited tiles.
+        pub heart_icon: OnceCell<gdk4::Paintable>,
         /// Cached checkbox icon (selected state).
         pub check_icon: OnceCell<gdk4::Paintable>,
         /// Cached checkbox icon (unselected state).
@@ -365,23 +367,36 @@ mod imp {
                 snapshot.append_color(&sctx.select_tint, &rect);
             }
 
-            // Checkbox badge in select mode.
+            self.paint_badges(snapshot, &asset, it, row, selected);
+
+            if clipped {
+                snapshot.pop();
+            }
+            result
+        }
+
+        /// Overlays on top of the thumbnail: select-mode checkbox, video play badge,
+        /// and the favorite heart.
+        fn paint_badges(
+            &self,
+            snapshot: &gtk::Snapshot,
+            asset: &AssetObject,
+            it: &LaidItem,
+            row: &LaidRow,
+            selected: bool,
+        ) {
             if self.select_mode.get() {
                 self.paint_checkbox(snapshot, it.x, row.y, row.h, selected);
             }
-
-            // Video badge: paint a centred play icon over video asset cells.
             let is_video = asset
                 .property::<String>("asset-type")
                 .eq_ignore_ascii_case("VIDEO");
             if is_video {
                 self.paint_video_badge(snapshot, it.x, row.y, it.w, row.h);
             }
-
-            if clipped {
-                snapshot.pop();
+            if asset.is_favorite() {
+                self.paint_favorite_badge(snapshot, it.x + it.w, row.y + row.h, row.h);
             }
-            result
         }
 
         /// Paint the video play-icon badge centred on the cell.
@@ -427,6 +442,41 @@ mod imp {
                 icon_size as f64,
             );
             snapshot.restore();
+        }
+
+        /// Paint a white heart in the bottom-right corner (`right`, `bottom`) of a
+        /// favorited tile. A dark copy offset by one pixel keeps it legible on bright photos.
+        fn paint_favorite_badge(
+            &self,
+            snapshot: &gtk::Snapshot,
+            right: f32,
+            bottom: f32,
+            cell_h: f32,
+        ) {
+            let icon = self
+                .heart_icon
+                .get_or_init(|| resolve_symbolic_icon(&self.obj(), "mimick-heart-filled-symbolic"));
+            let Some(symbolic) = icon.dynamic_cast_ref::<gtk::SymbolicPaintable>() else {
+                return;
+            };
+            let size = (cell_h * 0.12).clamp(14.0, 22.0);
+            let margin = (size * 0.4).max(6.0);
+            let shadow = gdk4::RGBA::new(0.0, 0.0, 0.0, 0.45);
+            let white = gdk4::RGBA::new(1.0, 1.0, 1.0, 0.95);
+            for (offset, color) in [(1.0, shadow), (0.0, white)] {
+                snapshot.save();
+                snapshot.translate(&gtk::graphene::Point::new(
+                    right - margin - size + offset,
+                    bottom - margin - size + offset,
+                ));
+                symbolic.snapshot_symbolic(
+                    snapshot.upcast_ref::<gdk4::Snapshot>(),
+                    size as f64,
+                    size as f64,
+                    &[color],
+                );
+                snapshot.restore();
+            }
         }
 
         /// Paint a checkbox indicator in the top-left corner of a tile.

@@ -14,15 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added moving photos to the Immich trash (right-click menu, lightbox button, or Delete key) and editing their description, date taken, and favorite status from the library (#183).
 - Added tag support: tags show in the lightbox details pane, where they can be added, created, or removed, and clicking a tag (or using the new Tag search filter) shows every photo with that tag (#141).
 - Added a Trash view to the library sidebar: restore or permanently delete trashed items, or empty the trash (#229).
+- Added favorites: a heart button in the lightbox (or **F**), menu and Edit Info toggles, a heart badge on favorited thumbnails, and a Favorites sidebar entry.
+- Added a Shared Albums sidebar entry, and a Share dialog for your albums (add people, change Viewer/Editor roles, remove people).
+- Added shared links: create a public link from an album, a selection, or the right-click menu (description, expiry, password, download/upload/metadata options), and manage all links from the new Shared Links sidebar entry (copy, edit, delete).
+- Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
 
 - Bumped Flatpak runtime and CI builder image to GNOME 51.
 - Updated GitHub Actions dependencies (`taiki-e/install-action`, `github/codeql-action`).
+- Redesigned tags in the details pane as colored pill chips with an inline remove button, a "+" header button, and an empty state.
+- "Date taken" in Edit Info is now picked from a calendar with hour, minute, and second fields instead of typed text.
+- Server statistics now open from the connection row in the library sidebar; the server row opens About.
 
 ### Refactored
 
 - Resolved static-analysis findings by simplifying Rust idioms, moving filesystem work off asynchronous UI paths, and splitting local/startup file traversal into focused helpers.
+- Split the library window, controls, page loading, settings window, queue manager, and several dialogs into focused modules, and shared the duplicated API request and sidebar code.
 
 ### Fixed
 

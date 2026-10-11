@@ -10,7 +10,7 @@ use super::errors::{RequestContext, classify_http_issue, classify_network_issue}
 use super::{
     ExifSearchResponse, ExploreSection, ImmichApiClient, LibraryAsset, MetadataSearchFilters,
     PeopleResponse, Person, PlaceItem, SearchResponse, ServerAbout, ServerStatistics, ServerStats,
-    SortOrder,
+    SortOrder, VersionHistoryEntry,
 };
 
 impl ImmichApiClient {
@@ -371,6 +371,17 @@ impl ImmichApiClient {
             Ok(resp) => Err(format!("HTTP {}", resp.status())),
             Err(err) => Err(err.to_string()),
         }
+    }
+
+    /// Versions this server has run, newest first.
+    pub async fn fetch_version_history(&self) -> Result<Vec<VersionHistoryEntry>, String> {
+        let resp = self
+            .send_json(reqwest::Method::GET, "/api/server/version-history", None)
+            .await?;
+        let mut history: Vec<VersionHistoryEntry> =
+            resp.json().await.map_err(|err| err.to_string())?;
+        history.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(history)
     }
 
     /// Retrieve detailed Immich server system information (e.g. version).

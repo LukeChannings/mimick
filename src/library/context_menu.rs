@@ -20,6 +20,7 @@ use super::download::{
     begin_download_session, finish_download_item, open_local_with_default_app, start_download,
     track_download_item,
 };
+use super::favorites::{FavoriteHooks, toggle_favorite};
 use super::load_texture_oriented;
 use super::trash_view;
 
@@ -173,6 +174,17 @@ fn append_manage_buttons(
         return;
     }
 
+    append_favorite_button(menu, ui, item, &hooks);
+    let (ui_link, link_id) = (ui.clone(), remote_id.clone());
+    menu.add("Create Share Link…", false, move || {
+        super::shared_link_dialog::present(
+            ui_link.clone(),
+            super::shared_link_dialog::LinkDialogMode::Create(
+                crate::api_client::SharedLinkTarget::Assets(vec![link_id.clone()]),
+            ),
+            Rc::new(|| {}),
+        )
+    });
     let (ui_edit, filename, on_edited) = (
         ui.clone(),
         item.property::<String>("filename"),
@@ -195,6 +207,31 @@ fn append_manage_buttons(
             let on_trashed = on_trashed.clone();
             confirm_trash(ui_trash.clone(), vec![target], 0, move || on_trashed());
         }
+    });
+}
+
+/// "Add to / Remove from Favorites". The opening view is told through `on_edited` so a
+/// lightbox can refresh its heart, and through `on_trashed` when the Favorites view drops it.
+fn append_favorite_button(
+    menu: &Menu,
+    ui: &Rc<LibraryWindowUi>,
+    item: &AssetObject,
+    hooks: &AssetMenuHooks,
+) {
+    let label = if item.is_favorite() {
+        "Remove from Favorites"
+    } else {
+        "Add to Favorites"
+    };
+    let (ui, item) = (ui.clone(), item.clone());
+    let (on_edited, on_trashed) = (hooks.on_edited.clone(), hooks.on_trashed.clone());
+    menu.add(label, false, move || {
+        let on_edited = on_edited.clone();
+        let hooks = FavoriteHooks {
+            on_change: Rc::new(move |_| on_edited(false)),
+            on_removed: on_trashed.clone(),
+        };
+        toggle_favorite(&ui, &item, hooks);
     });
 }
 
