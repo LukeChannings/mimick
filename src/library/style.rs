@@ -267,6 +267,32 @@ picture.mimick-person-avatar:active {
     background-color: alpha(@warning_bg_color, 0.22);
 }
 
+/* Tag pills in the details pane: one rounded chip holding the clickable
+   name (color dot + label) and a small remove button. */
+box.mimick-tag-chip {
+    border-radius: 999px;
+    background-color: alpha(@accent_bg_color, 0.14);
+    border: 1px solid alpha(@accent_bg_color, 0.35);
+}
+
+box.mimick-tag-chip > button.mimick-tag-name {
+    min-height: 26px;
+    padding: 2px 4px 2px 10px;
+    border-radius: 999px;
+}
+
+box.mimick-tag-chip > button.mimick-tag-remove {
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    margin-right: 3px;
+    -gtk-icon-size: 12px;
+}
+
+box.mimick-tag-chip > button:hover {
+    background-color: alpha(@accent_bg_color, 0.22);
+}
+
 scrolledwindow.mimick-details-pane {
     background: alpha(@window_bg_color, 0.30);
 }

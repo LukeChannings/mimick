@@ -542,6 +542,9 @@ pub struct Tag {
     pub id: String,
     pub name: String,
     pub value: String,
+    /// Optional `#rrggbb` color set in Immich.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 /// Editable asset fields for `PUT /api/assets/{id}`; `None` fields are left unchanged.

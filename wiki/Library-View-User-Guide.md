@@ -235,7 +235,7 @@ Click any asset in the grid to open it in the lightbox.
 
 Server assets show a **Tags** section in the details pane:
 
-- Each tag is a chip. Click its name to see every asset with that tag (the lightbox closes and the search form opens with the Tag filter set). Click **×** to remove it from the asset.
+- Each tag is a rounded pill showing the tag's color (set in Immich; the accent color otherwise), its parent path dimmed and its own name in bold (e.g. Trips/**2024**). Click the pill to see every asset with that tag (the lightbox closes and the search form opens with the Tag filter set). Click **×** to remove it from the asset. Assets without tags show "No tags yet".
 - **+** opens a picker of existing tags; typing narrows the list. If no tag matches what you typed, choose **Create “…”** (or press Enter) to create it. Nested tags such as `Trips/2024` work, and Immich creates any missing parents.
 - Requires `tag.read`; adding and removing also need `tag.asset`, and creating new tags needs `tag.create`.
 

@@ -24,11 +24,13 @@ struct TagContext {
     on_search: Rc<dyn Fn(Tag)>,
 }
 
-/// Header with "Add Tag" plus a wrapping row of tag chips. Cheap to clone.
+/// "Tags" group (matching the EXIF groups) with an add button and wrapping tag pills.
+/// Cheap to clone.
 #[derive(Clone)]
 pub(super) struct TagSection {
-    pub root: gtk::Box,
+    pub root: libadwaita::PreferencesGroup,
     chips: gtk::FlowBox,
+    empty_label: gtk::Label,
     add_btn: gtk::MenuButton,
     asset_id: Rc<RefCell<String>>,
     tags: Rc<RefCell<Vec<Tag>>>,
@@ -37,38 +39,35 @@ pub(super) struct TagSection {
 
 impl TagSection {
     pub(super) fn new() -> Self {
-        let title = gtk::Label::builder()
-            .label("Tags")
-            .xalign(0.0)
-            .hexpand(true)
-            .css_classes(["heading"])
-            .build();
         let add_btn = gtk::MenuButton::builder()
             .icon_name("list-add-symbolic")
             .tooltip_text("Add tag")
-            .css_classes(["flat"])
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "circular"])
             .build();
-        let header = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .build();
-        header.append(&title);
-        header.append(&add_btn);
-        let chips = gtk::FlowBox::builder()
-            .selection_mode(gtk::SelectionMode::None)
-            .column_spacing(4)
-            .row_spacing(4)
-            .max_children_per_line(8)
-            .build();
-        let root = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(4)
+        let root = libadwaita::PreferencesGroup::builder()
+            .title("Tags")
+            .header_suffix(&add_btn)
             .visible(false)
             .build();
-        root.append(&header);
-        root.append(&chips);
+        let chips = gtk::FlowBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .column_spacing(6)
+            .row_spacing(6)
+            .max_children_per_line(8)
+            .homogeneous(false)
+            .build();
+        let empty_label = gtk::Label::builder()
+            .label("No tags yet")
+            .xalign(0.0)
+            .css_classes(["dim-label"])
+            .build();
+        root.add(&chips);
+        root.add(&empty_label);
         let section = Self {
             root,
             chips,
+            empty_label,
             add_btn,
             asset_id: Rc::default(),
             tags: Rc::default(),
@@ -104,42 +103,58 @@ impl TagSection {
 
     fn rebuild_chips(&self) {
         self.chips.remove_all();
-        for tag in self.tags.borrow().iter() {
+        let tags = self.tags.borrow();
+        for tag in tags.iter() {
             self.chips.insert(&self.chip(tag), -1);
         }
+        self.chips.set_visible(!tags.is_empty());
+        self.empty_label.set_visible(tags.is_empty());
     }
 
+    /// One pill: color dot and label (click to search), plus a remove button.
     fn chip(&self, tag: &Tag) -> gtk::Box {
+        let content = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(6)
+            .build();
+        content.append(&color_dot(tag.color.as_deref()));
+        content.append(
+            &gtk::Label::builder()
+                .use_markup(true)
+                .label(tag_markup(&tag.value))
+                .build(),
+        );
         let name_btn = gtk::Button::builder()
-            .label(&tag.value)
+            .child(&content)
             .tooltip_text(format!("Show photos tagged “{}”", tag.value))
+            .css_classes(["flat", "mimick-tag-name"])
             .build();
         let section = self.clone();
         let clicked = tag.clone();
-        name_btn.connect_clicked(move |_| {
-            let on_search = section
-                .context
-                .borrow()
-                .as_ref()
-                .map(|c| c.on_search.clone());
-            if let Some(on_search) = on_search {
-                on_search(clicked.clone());
-            }
-        });
+        name_btn.connect_clicked(move |_| section.search(clicked.clone()));
         let remove_btn = gtk::Button::builder()
             .icon_name("window-close-symbolic")
-            .tooltip_text("Remove tag")
+            .tooltip_text(format!("Remove “{}”", tag.value))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "circular", "mimick-tag-remove"])
             .build();
         let section = self.clone();
         let removed = tag.clone();
         remove_btn.connect_clicked(move |_| section.remove_tag(removed.clone()));
         let chip = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
-            .css_classes(["linked"])
+            .css_classes(["mimick-tag-chip"])
             .build();
         chip.append(&name_btn);
         chip.append(&remove_btn);
         chip
+    }
+
+    fn search(&self, tag: Tag) {
+        let on_search = self.context.borrow().as_ref().map(|c| c.on_search.clone());
+        if let Some(on_search) = on_search {
+            on_search(tag);
+        }
     }
 
     fn remove_tag(&self, tag: Tag) {
@@ -308,6 +323,56 @@ impl Picker {
     }
 }
 
+/// Tag label with the parent path dimmed and the leaf bold: "Trips/<b>2024</b>".
+fn tag_markup(value: &str) -> String {
+    let (parent, leaf) = split_tag_path(value);
+    let leaf = format!("<b>{}</b>", glib::markup_escape_text(leaf));
+    match parent {
+        Some(parent) => format!(
+            "<span alpha=\"70%\">{}/</span>{}",
+            glib::markup_escape_text(parent),
+            leaf
+        ),
+        None => leaf,
+    }
+}
+
+/// `("Trips", "2024")` for `Trips/2024`; no parent for a top-level tag.
+fn split_tag_path(value: &str) -> (Option<&str>, &str) {
+    match value.rsplit_once('/') {
+        Some((parent, leaf)) if !parent.is_empty() => (Some(parent), leaf),
+        _ => (None, value),
+    }
+}
+
+/// Parse an Immich tag color (`#rrggbb`); tags without one use the theme accent.
+fn tag_color(color: Option<&str>) -> Option<gdk4::RGBA> {
+    color.and_then(|c| gdk4::RGBA::parse(c).ok())
+}
+
+/// Small filled circle in the tag's color.
+fn color_dot(color: Option<&str>) -> gtk::DrawingArea {
+    let rgba = tag_color(color)
+        .unwrap_or_else(|| libadwaita::StyleManager::default().accent_color().to_rgba());
+    let dot = gtk::DrawingArea::builder()
+        .content_width(10)
+        .content_height(10)
+        .valign(gtk::Align::Center)
+        .build();
+    dot.set_draw_func(move |_, cr, width, height| {
+        let radius = f64::from(width.min(height)) / 2.0;
+        cr.arc(radius, radius, radius, 0.0, std::f64::consts::TAU);
+        cr.set_source_rgba(
+            rgba.red().into(),
+            rgba.green().into(),
+            rgba.blue().into(),
+            rgba.alpha().into(),
+        );
+        let _ = cr.fill();
+    });
+    dot
+}
+
 /// Server tags matching `query` (case-insensitive substring) that aren't applied yet.
 fn picker_matches(all_tags: &[Tag], applied: &[Tag], query: &str) -> Vec<Tag> {
     let query = query.to_lowercase();
@@ -329,6 +394,7 @@ mod tests {
             id: id.into(),
             name: value.rsplit('/').next().unwrap_or(value).into(),
             value: value.into(),
+            color: None,
         }
     }
 
@@ -342,6 +408,31 @@ mod tests {
         let applied = [tag("3", "trips")];
         let matches = picker_matches(&all, &applied, "TRIP");
         assert_eq!(matches, vec![tag("1", "Trips/2024")]);
+    }
+
+    #[test]
+    fn split_tag_path_separates_parent_and_leaf() {
+        assert_eq!(split_tag_path("Trips/2024"), (Some("Trips"), "2024"));
+        assert_eq!(split_tag_path("A/B/C"), (Some("A/B"), "C"));
+        assert_eq!(split_tag_path("Family"), (None, "Family"));
+        assert_eq!(split_tag_path("/odd"), (None, "/odd"));
+    }
+
+    #[test]
+    fn tag_markup_escapes_and_bolds_the_leaf() {
+        assert_eq!(tag_markup("Family"), "<b>Family</b>");
+        assert_eq!(
+            tag_markup("R&D/Q1"),
+            "<span alpha=\"70%\">R&amp;D/</span><b>Q1</b>"
+        );
+    }
+
+    #[test]
+    fn tag_color_parses_hex_and_ignores_invalid() {
+        let red = tag_color(Some("#ff0000")).unwrap();
+        assert_eq!(red.red(), 1.0);
+        assert!(tag_color(Some("not a color")).is_none());
+        assert!(tag_color(None).is_none());
     }
 
     #[test]
