@@ -864,7 +864,11 @@ fn spawn_asset_thumbnail(ctx: Arc<AppContext>, asset_id: String, picture: gtk::P
 }
 
 /// Helper to asynchronously request and render a round avatar person face thumbnail.
-fn spawn_person_thumbnail(ctx: Arc<AppContext>, person_id: String, picture: gtk::Picture) {
+pub(super) fn spawn_person_thumbnail(
+    ctx: Arc<AppContext>,
+    person_id: String,
+    picture: gtk::Picture,
+) {
     glib::timeout_add_local_once(std::time::Duration::from_millis(120), move || {
         glib::MainContext::default().spawn_local(async move {
             let bytes = match ctx.api_client.fetch_person_thumbnail(&person_id).await {

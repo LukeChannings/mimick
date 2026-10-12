@@ -60,6 +60,10 @@ pub enum LibrarySource {
     /// Assets marked as favorites.
     Favorites,
     Archive,
+    Person {
+        id: String,
+        name: String,
+    },
 }
 
 impl LibrarySource {

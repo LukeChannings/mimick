@@ -15,6 +15,8 @@ use tokio::sync::{Mutex, Semaphore};
 mod albums;
 mod errors;
 mod library;
+mod people;
+pub use people::PersonUpdate;
 mod search;
 mod sharing;
 pub use sharing::AlbumRole;
@@ -429,6 +431,8 @@ pub struct Person {
     pub name: String,
     #[serde(default, rename = "isHidden")]
     pub is_hidden: bool,
+    #[serde(default, rename = "birthDate")]
+    pub birth_date: Option<String>,
 }
 
 /// List wrapper of recognized people returned by Immich.

@@ -28,6 +28,7 @@ The window uses a sidebar + content split.
 - **Albums** — album landing page
 - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
+- **People** — everyone Immich has recognized (see [People](#people))
 - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - the arrow on **Albums** expands your three most recently updated albums
@@ -322,6 +323,18 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 - The right-click menu has **Add to Favorites** / **Remove from Favorites**, and **Edit Info…** has a heart toggle.
 - Favorited thumbnails show a small white heart in the bottom-right corner.
 - The **Favorites** sidebar entry lists every favorite. Removing a favorite there drops it from the list (the lightbox moves on to the next asset).
+
+---
+
+## People
+
+- The **People** sidebar entry shows every recognized face. Type in the search box to filter by name; the eye button also shows people you've hidden (dimmed).
+- Click a face to see that person's photos.
+- The **⋯** button on each face has:
+  - **Rename…** (or **Add Name…**)
+  - **Set Birthday…**: pick a date, or **Remove** it.
+  - **Hide** / **Unhide**: hidden people don't appear in People or Explore.
+  - **Merge People…**: tick the people who are really this person; their faces move to them. This can't be undone.
 
 ---
 

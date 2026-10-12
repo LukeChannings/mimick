@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added shared links: create a public link from an album, a selection, or the right-click menu (description, expiry, password, download/upload/metadata options), and manage all links from the new Shared Links sidebar entry (copy, edit, delete).
 - Added an Archive sidebar entry, plus Archive / Unarchive in the right-click menu, the lightbox (or **A**), and the selection bar (#239).
 - Added an expander on the Albums sidebar row that shows your three most recently updated albums; the full album list below is now a collapsible **All Albums** section (#240).
+- Added a People sidebar page: search people, show hidden ones, open a person's photos, and rename, hide or unhide, set a birthday, or merge people from each face's menu (#235).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed

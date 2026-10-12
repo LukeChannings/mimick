@@ -27,7 +27,7 @@ pub struct SidebarParts {
 }
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
-const FIXED_ROWS: [(&str, &str, &str, &str); 9] = [
+const FIXED_ROWS: [(&str, &str, &str, &str); 10] = [
     (
         "Photos",
         "Timeline of every photo and video",
@@ -45,6 +45,12 @@ const FIXED_ROWS: [(&str, &str, &str, &str); 9] = [
         "People, places, and things",
         "view-grid-symbolic",
         "explore",
+    ),
+    (
+        "People",
+        "Faces Immich has recognized",
+        "avatar-default-symbolic",
+        "people",
     ),
     (
         "Albums",
@@ -218,12 +224,12 @@ pub fn set_recent_albums(parts: &SidebarParts, albums: &[LibraryAlbum]) {
     for (offset, album) in recent_albums(albums).into_iter().enumerate() {
         let row = recent_album_row(album);
         row.set_visible(expanded);
-        parts.fixed_list.insert(&row, (position + 1 + offset) as i32);
+        parts
+            .fixed_list
+            .insert(&row, (position + 1 + offset) as i32);
         rows.push(row);
     }
-    parts
-        .recent_expander
-        .set_visible(!rows.is_empty());
+    parts.recent_expander.set_visible(!rows.is_empty());
 }
 
 pub fn recent_album_key(row: &gtk::ListBoxRow) -> Option<(String, String)> {
@@ -249,7 +255,10 @@ fn recent_album_row(album: &LibraryAlbum) -> gtk::ListBoxRow {
         .use_markup(false)
         .title_lines(1)
         .activatable(true)
-        .name(format!("{RECENT_ALBUM_PREFIX}{}:{}", album.id, album.album_name))
+        .name(format!(
+            "{RECENT_ALBUM_PREFIX}{}:{}",
+            album.id, album.album_name
+        ))
         .build();
     let icon = gtk::Image::builder()
         .icon_name("folder-pictures-symbolic")
@@ -299,13 +308,16 @@ mod tests {
             album("c", "2024-02-01T00:00:00.000Z"),
             album("d", "2024-04-01T00:00:00.000Z"),
         ];
-        let ids: Vec<&str> = recent_albums(&albums).iter().map(|a| a.id.as_str()).collect();
+        let ids: Vec<&str> = recent_albums(&albums)
+            .iter()
+            .map(|a| a.id.as_str())
+            .collect();
         assert_eq!(ids, ["d", "b", "c"]);
     }
 
     #[test]
     fn albums_row_has_a_fixed_index() {
-        assert_eq!(fixed_row_index("albums"), Some(3));
+        assert_eq!(fixed_row_index("albums"), Some(4));
         assert_eq!(fixed_row_index("missing"), None);
     }
 }

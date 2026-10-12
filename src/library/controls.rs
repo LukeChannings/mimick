@@ -333,6 +333,7 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                     super::refresh_search_tags(ui.clone(), None);
                 }
                 "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
+                "people" => super::people_view::show(&ui),
                 "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
                 "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
                 "archive" => sidebar_dispatch(ui.clone(), LibrarySource::Archive),
@@ -414,8 +415,11 @@ fn show_albums_page(ui: &Rc<LibraryWindowUi>, shared_only: bool) {
 }
 
 pub(super) fn sidebar_dispatch(ui: Rc<LibraryWindowUi>, source: LibrarySource) {
-    let on_albums_grid = ui.content_stack.visible_child_name().as_deref() == Some("albums");
-    if !on_albums_grid && ui.ctx.library_state.lock().source == source {
+    let on_page = matches!(
+        ui.content_stack.visible_child_name().as_deref(),
+        Some("albums" | "shared-links" | "people")
+    );
+    if !on_page && ui.ctx.library_state.lock().source == source {
         return;
     }
     let request = ui.ctx.library_state.lock().navigate_to(source);
