@@ -12,7 +12,7 @@ use super::dialogs::{TextPrompt, popover_menu, prompt_text};
 use super::explore_view::spawn_person_thumbnail;
 use super::state::LibrarySource;
 
-const AVATAR_SIZE: i32 = 120;
+const AVATAR_SIZE: i32 = 140;
 
 pub(super) struct PeopleView {
     pub root: gtk::Box,
@@ -30,13 +30,13 @@ pub(super) fn build_people_view() -> PeopleView {
         .homogeneous(true)
         .min_children_per_line(2)
         .max_children_per_line(30)
-        .column_spacing(6)
+        .column_spacing(4)
         .row_spacing(12)
         .valign(gtk::Align::Start)
         .margin_top(12)
         .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
+        .margin_start(8)
+        .margin_end(8)
         .build();
     let empty = libadwaita::StatusPage::builder()
         .icon_name("avatar-default-symbolic")
@@ -160,11 +160,31 @@ fn render(ui: &Rc<LibraryWindowUi>) {
 }
 
 fn visible_people<'a>(people: &'a [Person], query: &str, show_hidden: bool) -> Vec<&'a Person> {
-    people
+    let mut shown: Vec<&Person> = people
         .iter()
         .filter(|person| show_hidden || !person.is_hidden)
         .filter(|person| query.is_empty() || person.name.to_lowercase().contains(query))
-        .collect()
+        .collect();
+    shown.sort_by_key(|person| !person.is_favorite);
+    shown
+}
+
+fn tile_avatar(ui: &LibraryWindowUi, person: &Person) -> gtk::Overlay {
+    let overlay = gtk::Overlay::builder()
+        .child(&avatar(ui, person, AVATAR_SIZE))
+        .halign(gtk::Align::Center)
+        .build();
+    if person.is_favorite {
+        let badge = gtk::Image::builder()
+            .icon_name("mimick-heart-filled-symbolic")
+            .halign(gtk::Align::End)
+            .valign(gtk::Align::End)
+            .tooltip_text("Favorite")
+            .css_classes(["mimick-person-favorite"])
+            .build();
+        overlay.add_overlay(&badge);
+    }
+    overlay
 }
 
 pub(super) fn display_name(person: &Person) -> &str {
@@ -198,7 +218,7 @@ fn person_tile(ui: &Rc<LibraryWindowUi>, person: &Person) -> gtk::Overlay {
         .spacing(6)
         .halign(gtk::Align::Center)
         .build();
-    inner.append(&avatar(ui, person, AVATAR_SIZE));
+    inner.append(&tile_avatar(ui, person));
     inner.append(&label);
     let open = gtk::Button::builder()
         .child(&inner)
@@ -245,6 +265,12 @@ pub(super) fn person_menu_items(
         "Rename…"
     };
     let hide_label = if person.is_hidden { "Unhide" } else { "Hide" };
+    let favorite_label = if person.is_favorite {
+        "Remove from Favorites"
+    } else {
+        "Add to Favorites"
+    };
+    let (ui_favorite, p_favorite) = (ui.clone(), person.clone());
     let (ui_rename, p_rename) = (ui.clone(), person.clone());
     let (ui_birthday, p_birthday) = (ui.clone(), person.clone());
     let (ui_hide, p_hide) = (ui.clone(), person.clone());
@@ -253,6 +279,10 @@ pub(super) fn person_menu_items(
         (
             rename_label.to_string(),
             Box::new(move || rename(&ui_rename, &p_rename)),
+        ),
+        (
+            favorite_label.to_string(),
+            Box::new(move || set_favorite(&ui_favorite, &p_favorite, !p_favorite.is_favorite)),
         ),
         (
             "Set Birthday…".to_string(),
@@ -296,12 +326,23 @@ fn save(ui: &Rc<LibraryWindowUi>, person_id: &str, update: PersonUpdate) {
     });
 }
 
+pub(super) fn set_favorite(ui: &Rc<LibraryWindowUi>, person: &Person, favorite: bool) {
+    let update = PersonUpdate {
+        is_favorite: Some(favorite),
+        ..PersonUpdate::default()
+    };
+    save(ui, &person.id, update);
+}
+
 fn apply_update(person: &mut Person, update: &PersonUpdate) {
     if let Some(name) = &update.name {
         person.name = name.clone();
     }
     if let Some(hidden) = update.is_hidden {
         person.is_hidden = hidden;
+    }
+    if let Some(favorite) = update.is_favorite {
+        person.is_favorite = favorite;
     }
     if let Some(birth_date) = &update.birth_date {
         person.birth_date = birth_date.clone();
@@ -397,6 +438,7 @@ mod tests {
             name: name.into(),
             is_hidden: hidden,
             birth_date: None,
+            is_favorite: false,
         }
     }
 
@@ -411,6 +453,22 @@ mod tests {
         assert_eq!(ids(visible_people(&people, "", false)), ["1", "3"]);
         assert_eq!(ids(visible_people(&people, "", true)), ["1", "2", "3"]);
         assert_eq!(ids(visible_people(&people, "be", true)), ["2"]);
+    }
+
+    #[test]
+    fn favorites_come_first_in_their_original_order() {
+        let mut people = vec![
+            person("1", "Ana", false),
+            person("2", "Ben", false),
+            person("3", "Cy", false),
+        ];
+        people[1].is_favorite = true;
+        people[2].is_favorite = true;
+        let ids: Vec<&str> = visible_people(&people, "", false)
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect();
+        assert_eq!(ids, ["2", "3", "1"]);
     }
 
     #[test]

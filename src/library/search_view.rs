@@ -6,7 +6,7 @@
 //! the "search bar disappears" problem while keeping a single grid
 //! renderer.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use glib::clone;
@@ -34,10 +34,71 @@ pub struct SearchViewParts {
     pub search_button: gtk::Button,
     pub clear_button: gtk::Button,
     pub filters: FilterWidgets,
+    modes: Rc<RefCell<Vec<u32>>>,
+}
+
+const MODE_LABELS: [&str; 3] = ["Smart Search", "Filename", "OCR"];
+
+pub fn selected_mode(view: &SearchViewParts) -> u32 {
+    current_mode(&view.modes, &view.search_mode)
+}
+
+fn current_mode(modes: &RefCell<Vec<u32>>, dropdown: &gtk::DropDown) -> u32 {
+    modes
+        .borrow()
+        .get(dropdown.selected() as usize)
+        .copied()
+        .unwrap_or(1)
+}
+
+pub fn set_available_modes(view: &SearchViewParts, smart: bool, ocr: bool) {
+    let modes = available_modes(smart, ocr);
+    if *view.modes.borrow() == modes {
+        return;
+    }
+    let previous = selected_mode(view);
+    let labels: Vec<&str> = modes
+        .iter()
+        .map(|mode| MODE_LABELS[*mode as usize])
+        .collect();
+    *view.modes.borrow_mut() = modes.clone();
+    view.search_mode
+        .set_model(Some(&gtk::StringList::new(&labels)));
+    let index = modes.iter().position(|mode| *mode == previous).unwrap_or(0);
+    view.search_mode.set_selected(index as u32);
+}
+
+fn available_modes(smart: bool, ocr: bool) -> Vec<u32> {
+    [(0, smart), (1, true), (2, ocr)]
+        .into_iter()
+        .filter(|(_, enabled)| *enabled)
+        .map(|(mode, _)| mode)
+        .collect()
+}
+
+pub fn set_filter_features(view: &SearchViewParts, ocr: bool, ratings: bool, tags: bool) {
+    let filters = &view.filters;
+    filters.ocr_row.set_visible(ocr);
+    if !ocr {
+        filters.ocr_row.set_text("");
+    }
+    filters.rating_row.set_visible(ratings);
+    if !ratings {
+        filters.rating_row.set_selected(0);
+    }
+    if let Some(group) = filters
+        .tag_row
+        .ancestor(libadwaita::PreferencesGroup::static_type())
+    {
+        group.set_visible(tags);
+    }
+    if !tags {
+        filters.tag_row.set_selected(0);
+    }
 }
 
 fn build_search_bar() -> (gtk::Box, gtk::DropDown, gtk::SearchEntry) {
-    let mode_model = gtk::StringList::new(&["Smart Search", "Filename", "OCR"]);
+    let mode_model = gtk::StringList::new(&MODE_LABELS);
     let search_mode = gtk::DropDown::builder()
         .model(&mode_model)
         .selected(0)
@@ -227,11 +288,13 @@ pub fn build_search_view() -> SearchViewParts {
     let root = wrap_in_scrolled_revealer(&inner);
     connect_filter_toggle(&toggle_button, toggle_icon, filters.revealer.clone());
 
+    let modes: Rc<RefCell<Vec<u32>>> = Rc::new(RefCell::new(available_modes(true, true)));
+    let modes_for_placeholder = modes.clone();
     search_mode.connect_selected_notify(clone!(
         #[weak]
         search_entry,
         move |dd| {
-            let ph = match dd.selected() {
+            let ph = match current_mode(&modes_for_placeholder, dd) {
                 1 => "Search filenames",
                 2 => "Find words shown inside images",
                 _ => "Describe what you're looking for\u{2026}",
@@ -247,6 +310,7 @@ pub fn build_search_view() -> SearchViewParts {
         search_button,
         clear_button,
         filters,
+        modes,
     }
 }
 
@@ -406,4 +470,16 @@ pub fn normalise_iso_date(text: &gtk::glib::GString) -> Option<String> {
         return Some(format!("{trimmed}T00:00:00.000Z"));
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn available_modes_keep_filename_search() {
+        assert_eq!(available_modes(true, true), [0, 1, 2]);
+        assert_eq!(available_modes(false, false), [1]);
+        assert_eq!(available_modes(false, true), [1, 2]);
+    }
 }

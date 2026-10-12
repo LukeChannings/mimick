@@ -3,7 +3,7 @@ use std::rc::Rc;
 use gtk::prelude::*;
 
 use super::LibraryWindowUi;
-use super::state::{LibraryPage, LibrarySource, Location};
+use super::state::{LibraryPage, LibrarySource, LibraryState, Location};
 
 #[derive(Debug, PartialEq, Eq)]
 enum SidebarTarget {
@@ -25,7 +25,29 @@ pub(super) fn go_back(ui: &Rc<LibraryWindowUi>) -> bool {
         ui.nav.pop();
         return true;
     }
-    let Some(location) = ui.ctx.library_state.lock().navigate_back() else {
+    let Some(location) = step_to_available(ui, LibraryState::navigate_back) else {
+        return false;
+    };
+    show(ui, &location);
+    true
+}
+
+fn step_to_available(
+    ui: &LibraryWindowUi,
+    step: fn(&mut LibraryState) -> Option<Location>,
+) -> Option<Location> {
+    let features = ui.features.get();
+    let mut state = ui.ctx.library_state.lock();
+    loop {
+        let location = step(&mut state)?;
+        if super::features::is_available(&features, &location) {
+            return Some(location);
+        }
+    }
+}
+
+pub(super) fn go_forward(ui: &Rc<LibraryWindowUi>) -> bool {
+    let Some(location) = step_to_available(ui, LibraryState::navigate_forward) else {
         return false;
     };
     show(ui, &location);
@@ -57,8 +79,12 @@ fn show(ui: &Rc<LibraryWindowUi>, location: &Location) {
             super::source_header::show(ui, &request.1);
             super::load_source_page(ui.clone(), request, false);
         }
-        Location::Page(page) => show_page(ui, page),
+        Location::Page(page) => {
+            set_view_title(ui, &page_title(page));
+            show_page(ui, page);
+        }
     }
+    sync_controls(ui, location);
     sync_sidebar(ui);
     update_back_button(ui);
 }
@@ -87,6 +113,53 @@ fn show_page(ui: &Rc<LibraryWindowUi>, page: &LibraryPage) {
     }
 }
 
+pub(super) fn set_view_title(ui: &LibraryWindowUi, title: &str) {
+    if let Some(page) = ui
+        .nav
+        .navigation_stack()
+        .item(0)
+        .and_downcast::<libadwaita::NavigationPage>()
+    {
+        libadwaita::prelude::NavigationPageExt::set_title(&page, title);
+    }
+}
+
+fn page_title(page: &LibraryPage) -> String {
+    let leaf = |path: &Option<String>, root: &str| {
+        path.as_deref()
+            .map(super::tree_page::leaf_name)
+            .unwrap_or(root)
+            .to_string()
+    };
+    match page {
+        LibraryPage::Albums { shared_only: false } => "Albums".to_string(),
+        LibraryPage::Albums { shared_only: true } => "Shared Albums".to_string(),
+        LibraryPage::SharedLinks => "Shared Links".to_string(),
+        LibraryPage::People => "People".to_string(),
+        LibraryPage::Tags { path } => leaf(path, "Tags"),
+        LibraryPage::Folders { path } => leaf(path, "Folders"),
+        LibraryPage::Sharing => "Sharing".to_string(),
+        LibraryPage::Search => "Search".to_string(),
+    }
+}
+
+pub(super) fn sync_controls(ui: &LibraryWindowUi, location: &Location) {
+    let (timeline, sort) = match location {
+        Location::Source(LibrarySource::Explore) => (false, false),
+        Location::Source(source) => (
+            matches!(source, LibrarySource::AllAssets | LibrarySource::Timeline),
+            true,
+        ),
+        Location::Page(LibraryPage::Albums { .. }) => (false, true),
+        Location::Page(_) => (false, false),
+    };
+    ui.timeline_toggle.set_visible(timeline);
+    ui.sort_mode.set_visible(sort);
+    if matches!(location, Location::Page(_)) {
+        ui.source_revealer.set_reveal_child(false);
+    }
+}
+
 pub(super) fn update_back_button(ui: &LibraryWindowUi) {
     let can_go_back = ui.ctx.library_state.lock().can_go_back();
     ui.back_button.set_sensitive(can_go_back);
@@ -95,19 +168,26 @@ pub(super) fn update_back_button(ui: &LibraryWindowUi) {
 pub(super) fn sync_sidebar(ui: &LibraryWindowUi) {
     let target = sidebar_target(&current(ui));
     let sidebar = &ui.sidebar;
+    super::bottom_nav::sync(
+        &ui.bottom_nav,
+        match &target {
+            SidebarTarget::Fixed(key) => key,
+            SidebarTarget::Album(_) => "albums",
+        },
+    );
     ui.sidebar_suppressed.set(true);
     match target {
         SidebarTarget::Fixed(key) => {
-            select_fixed_row(&sidebar.fixed_list, key);
+            super::sidebar::select_fixed(sidebar, key);
             sidebar.albums_list.unselect_all();
         }
         SidebarTarget::Album(id) => match super::sidebar::recent_row_for_album(sidebar, &id) {
             Some(row) => {
-                sidebar.fixed_list.select_row(Some(&row));
+                super::sidebar::select_fixed_row(sidebar, &row);
                 sidebar.albums_list.unselect_all();
             }
             None => {
-                sidebar.fixed_list.unselect_all();
+                super::sidebar::unselect_fixed(sidebar);
                 match album_row(&sidebar.albums_list, &id) {
                     Some(row) => sidebar.albums_list.select_row(Some(&row)),
                     None => sidebar.albums_list.unselect_all(),
@@ -116,20 +196,6 @@ pub(super) fn sync_sidebar(ui: &LibraryWindowUi) {
         },
     }
     ui.sidebar_suppressed.set(false);
-}
-
-fn select_fixed_row(list: &gtk::ListBox, key: &str) {
-    let mut child = list.first_child();
-    while let Some(widget) = child {
-        child = widget.next_sibling();
-        if let Ok(row) = widget.downcast::<gtk::ListBoxRow>()
-            && row.tooltip_text().as_deref() == Some(key)
-        {
-            list.select_row(Some(&row));
-            return;
-        }
-    }
-    list.unselect_all();
 }
 
 fn album_row(list: &gtk::ListBox, album_id: &str) -> Option<gtk::ListBoxRow> {
@@ -241,6 +307,21 @@ mod tests {
             );
         }
         assert_eq!(location_for_key("nope"), None);
+    }
+
+    #[test]
+    fn pages_are_titled_by_their_current_level() {
+        assert_eq!(page_title(&LibraryPage::Tags { path: None }), "Tags");
+        assert_eq!(
+            page_title(&LibraryPage::Folders {
+                path: Some("/photos/2024".into())
+            }),
+            "2024"
+        );
+        assert_eq!(
+            page_title(&LibraryPage::Albums { shared_only: true }),
+            "Shared Albums"
+        );
     }
 
     #[test]

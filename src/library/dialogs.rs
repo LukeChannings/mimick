@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use gtk::prelude::*;
 use libadwaita::prelude::*;
 
@@ -45,6 +47,44 @@ pub(super) fn prompt_text(
     });
     dialog.present(Some(&ui.window));
     entry.grab_focus();
+}
+
+pub(super) fn prompt_multiline(
+    ui: &LibraryWindowUi,
+    heading: &str,
+    initial: &str,
+    on_accept: Rc<dyn Fn(String)>,
+) {
+    let view = gtk::TextView::builder()
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .top_margin(8)
+        .bottom_margin(8)
+        .left_margin(8)
+        .right_margin(8)
+        .build();
+    view.buffer().set_text(initial);
+    let frame = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .min_content_height(120)
+        .child(&view)
+        .css_classes(["card"])
+        .build();
+    let dialog = libadwaita::AlertDialog::builder()
+        .heading(heading)
+        .extra_child(&frame)
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("accept", "Save");
+    dialog.set_response_appearance("accept", libadwaita::ResponseAppearance::Suggested);
+    dialog.set_close_response("cancel");
+    dialog.connect_response(None, move |_, response| {
+        if response == "accept" {
+            let buffer = view.buffer();
+            let text = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false);
+            on_accept(text.trim().to_string());
+        }
+    });
+    dialog.present(Some(&ui.window));
 }
 
 pub(super) fn confirm(

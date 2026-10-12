@@ -201,13 +201,27 @@ fn append_manage_buttons(
             on_edited.clone(),
         )
     });
+    append_trash_button(menu, ui, target, hooks.on_trashed);
+}
+
+fn append_trash_button(
+    menu: &Menu,
+    ui: &Rc<LibraryWindowUi>,
+    target: TrashTarget,
+    on_trashed: Rc<dyn Fn()>,
+) {
     // The popover is single-use, so the target is handed to the dialog on the first click.
     let target = std::cell::RefCell::new(Some(target));
-    let (ui_trash, on_trashed) = (ui.clone(), hooks.on_trashed);
-    menu.add("Move to Trash", true, move || {
+    let label = if ui.features.get().trash {
+        "Move to Trash"
+    } else {
+        "Delete…"
+    };
+    let ui = ui.clone();
+    menu.add(label, true, move || {
         if let Some(target) = target.borrow_mut().take() {
             let on_trashed = on_trashed.clone();
-            confirm_trash(ui_trash.clone(), vec![target], 0, move || on_trashed());
+            confirm_trash(ui.clone(), vec![target], 0, move || on_trashed());
         }
     });
 }

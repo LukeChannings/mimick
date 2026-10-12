@@ -14,6 +14,8 @@ use tokio::sync::{Mutex, Semaphore};
 
 mod albums;
 mod errors;
+mod features;
+pub use features::LibraryFeatures;
 mod folders;
 mod library;
 mod partners;
@@ -440,6 +442,8 @@ pub struct Person {
     pub is_hidden: bool,
     #[serde(default, rename = "birthDate")]
     pub birth_date: Option<String>,
+    #[serde(default, rename = "isFavorite")]
+    pub is_favorite: bool,
 }
 
 /// List wrapper of recognized people returned by Immich.
@@ -586,6 +590,15 @@ pub struct Tag {
     /// Optional `#rrggbb` color set in Immich.
     #[serde(default)]
     pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Editable asset fields for `PUT /api/assets/{id}`; `None` fields are left unchanged.

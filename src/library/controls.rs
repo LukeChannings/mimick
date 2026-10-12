@@ -106,6 +106,8 @@ fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
     ui.window.add_controller(f5_controller);
 }
 
+type NavAction = fn(&Rc<LibraryWindowUi>) -> bool;
+
 fn connect_back_controls(ui: &Rc<LibraryWindowUi>) {
     ui.back_button.connect_clicked(clone!(
         #[strong]
@@ -114,30 +116,38 @@ fn connect_back_controls(ui: &Rc<LibraryWindowUi>) {
             navigation::go_back(&ui);
         }
     ));
+    add_mouse_button(ui, 8, navigation::go_back);
+    add_mouse_button(ui, 9, navigation::go_forward);
+    add_shortcut(ui, "<Alt>Left", navigation::go_back);
+    add_shortcut(ui, "<Alt>Right", navigation::go_forward);
+    connect_swipe_back(ui);
+}
 
-    let mouse_back = gtk::GestureClick::builder()
-        .button(8)
+fn add_mouse_button(ui: &Rc<LibraryWindowUi>, button: u32, action: NavAction) {
+    let gesture = gtk::GestureClick::builder()
+        .button(button)
         .propagation_phase(gtk::PropagationPhase::Capture)
         .build();
-    mouse_back.connect_pressed(clone!(
+    gesture.connect_pressed(clone!(
         #[strong]
         ui,
         move |gesture, _, _, _| {
-            if navigation::go_back(&ui) {
+            if action(&ui) {
                 gesture.set_state(gtk::EventSequenceState::Claimed);
             }
         }
     ));
-    ui.window.add_controller(mouse_back);
+    ui.window.add_controller(gesture);
+}
 
-    // Alt+Left -> back. Attached to the window so it works regardless of focus.
-    let alt_left = gtk::Shortcut::builder()
-        .trigger(&gtk::ShortcutTrigger::parse_string("<Alt>Left").unwrap())
+fn add_shortcut(ui: &Rc<LibraryWindowUi>, trigger: &str, action: NavAction) {
+    let shortcut = gtk::Shortcut::builder()
+        .trigger(&gtk::ShortcutTrigger::parse_string(trigger).expect("valid shortcut"))
         .action(&gtk::CallbackAction::new(clone!(
             #[strong]
             ui,
             move |_, _| {
-                if navigation::go_back(&ui) {
+                if action(&ui) {
                     glib::Propagation::Stop
                 } else {
                     glib::Propagation::Proceed
@@ -145,9 +155,34 @@ fn connect_back_controls(ui: &Rc<LibraryWindowUi>) {
             }
         )))
         .build();
-    let alt_left_controller = gtk::ShortcutController::new();
-    alt_left_controller.add_shortcut(alt_left);
-    ui.window.add_controller(alt_left_controller);
+    let controller = gtk::ShortcutController::new();
+    controller.add_shortcut(shortcut);
+    ui.window.add_controller(controller);
+}
+
+fn connect_swipe_back(ui: &Rc<LibraryWindowUi>) {
+    let swipe = gtk::GestureSwipe::builder().touch_only(true).build();
+    let start_x = Rc::new(std::cell::Cell::new(0.0));
+    let start_for_begin = start_x.clone();
+    swipe.connect_begin(move |gesture, sequence| {
+        if let Some((x, _)) = gesture.point(sequence) {
+            start_for_begin.set(x);
+        }
+    });
+    swipe.connect_swipe(clone!(
+        #[strong]
+        ui,
+        move |_, vx, vy| {
+            if is_back_swipe(start_x.get(), vx, vy) {
+                navigation::go_back(&ui);
+            }
+        }
+    ));
+    ui.content_stack.add_controller(swipe);
+}
+
+fn is_back_swipe(start_x: f64, vx: f64, vy: f64) -> bool {
+    start_x > 32.0 && vx > 600.0 && vx > vy.abs() * 2.0
 }
 
 /// The sort dropdown changes options per view and sorts the visible content.
@@ -287,6 +322,9 @@ fn source_for_selection(
 pub(super) fn refresh_library_surfaces(ui: Rc<LibraryWindowUi>, include_current_source: bool) {
     load_albums(ui.clone());
     load_status(ui.clone());
+    if include_current_source {
+        super::features::load(&ui);
+    }
 
     // Clearing `populated` marks the cached explore/albums grids as stale
     // but, by itself, won't repaint a visible tab. Re-trigger the loader
@@ -320,26 +358,9 @@ pub(super) fn refresh_library_after_mutation(ui: Rc<LibraryWindowUi>, prefer_cur
 }
 
 pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
-    ui.sidebar.fixed_list.connect_row_selected(clone!(
-        #[strong]
-        ui,
-        move |_, row| {
-            if ui.sidebar_suppressed.get() {
-                return;
-            }
-            let Some(row) = row else {
-                return;
-            };
-            let location = match super::sidebar::recent_album_key(row) {
-                Some((id, name)) => Some(Location::Source(LibrarySource::Album { id, name })),
-                None => navigation::location_for_key(&row.tooltip_text().unwrap_or_default()),
-            };
-            if let Some(location) = location {
-                navigation::navigate(&ui, location);
-            }
-            auto_hide_sidebar(&ui);
-        }
-    ));
+    for list in &ui.sidebar.fixed_lists {
+        connect_fixed_list(&ui, list);
+    }
 
     ui.sidebar.albums_list.connect_row_selected(clone!(
         #[strong]
@@ -361,6 +382,29 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                     name: name.to_string(),
                 },
             );
+            auto_hide_sidebar(&ui);
+        }
+    ));
+}
+
+fn connect_fixed_list(ui: &Rc<LibraryWindowUi>, list: &gtk::ListBox) {
+    list.connect_row_selected(clone!(
+        #[strong]
+        ui,
+        move |_, row| {
+            if ui.sidebar_suppressed.get() {
+                return;
+            }
+            let Some(row) = row else {
+                return;
+            };
+            let location = match super::sidebar::recent_album_key(row) {
+                Some((id, name)) => Some(Location::Source(LibrarySource::Album { id, name })),
+                None => navigation::location_for_key(&row.tooltip_text().unwrap_or_default()),
+            };
+            if let Some(location) = location {
+                navigation::navigate(&ui, location);
+            }
             auto_hide_sidebar(&ui);
         }
     ));
@@ -439,6 +483,15 @@ mod tests {
 
     fn album() -> Option<(String, String)> {
         Some(("a1".to_string(), "Trips".to_string()))
+    }
+
+    #[test]
+    fn back_swipe_needs_a_fast_mostly_horizontal_swipe_away_from_the_edge() {
+        assert!(super::is_back_swipe(100.0, 900.0, 100.0));
+        assert!(!super::is_back_swipe(10.0, 900.0, 100.0));
+        assert!(!super::is_back_swipe(100.0, 300.0, 0.0));
+        assert!(!super::is_back_swipe(100.0, 900.0, 800.0));
+        assert!(!super::is_back_swipe(100.0, -900.0, 0.0));
     }
 
     #[test]

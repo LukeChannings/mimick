@@ -19,45 +19,64 @@ The library window opens instead of the settings window on the next launch. Sett
 
 The window uses a sidebar + content split.
 
-**Sidebar** (toggle with **F9** or the sidebar button in the header):
+**Sidebar** (toggle with **F9** or the sidebar button in the header), in three groups:
 
-- **Photos** — opens the timeline grid
-- **Search** — opens the search form above the grid
-- **Explore** — People, Places, Things
-- **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
-- **Albums** — album landing page
-- **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
-- **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
-- **People** — everyone Immich has recognized (see [People](#people))
-- **Tags** — your tag tree (see [Tags page](#tags-page))
-- **Folders** — server photos by their original folder (see [Folders](#folders))
-- **Sharing** — partner sharing (see [Partner Sharing](#partner-sharing))
-- **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
-- **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
+- **Library**
+  - **Photos** — opens the timeline grid
+  - **Explore** — People, Places, Things
+  - **People** — everyone Immich has recognized (see [People](#people))
+  - **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
+  - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
+  - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
+- **Albums & Sharing**
+  - **Albums** — album landing page (see [Editing Albums](#editing-albums))
+  - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
+  - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
+  - **Sharing** — partner sharing (see [Partner Sharing](#partner-sharing))
+- **Browse**
+  - **Search** — opens the search form above the grid
+  - **Tags** — your tag tree (see [Tags page](#tags-page))
+  - **Folders** — server photos by their original folder (see [Folders](#folders))
 - the arrow on **Albums** expands your three most recently updated albums
 - **All Albums** lists every album for quick navigation; click its heading to collapse it
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
 
 **View header:** every photo view opens with a header that scrolls away with the photos. It shows the view's title and, where Immich has them, details and actions:
 
-- **Albums**: item count, date range, who it's shared with or by, description, Share and Create share link buttons, and the linked-folder row with **Link folder** / **Sync**
-- **People**: face, name, photo count, age and birthday, and the person's **⋯** menu (Rename, Set Birthday, Hide, Merge People)
+- **Albums**: item count, date range, who it's shared with or by, description, Share and Create share link buttons, a **⋯** menu with **Rename…** and **Edit Description…** (your own albums), and the linked-folder row with **Link folder** / **Sync**
+- **People**: face, name, photo count, age and birthday, a heart to favorite them, and the person's **⋯** menu (Rename, Set Birthday, Hide, Merge People)
 - **Tags**: color, photo count, parent tags, and the tag's **⋯** menu
 - **Places**, **Folders**, **Favorites**, **Archive**, and searches: the item count where Immich can count it; folders also show their full path
 - **Trash**: the retention note with **Restore All** and **Empty Trash**
 
-**Back:** the header's back button, **Alt+Left**, or the mouse back button returns to the previous view, including pages such as Albums, People, Explore, and each level inside Tags and Folders. In the lightbox, the mouse back button closes it.
+**Back and Forward:** the header's back button, **Alt+Left**, the mouse back button, or a quick swipe right on a touch screen returns to the previous view, including pages such as Albums, People, Explore, and each level inside Tags and Folders. **Alt+Right** or the mouse forward button goes forward again. In the lightbox, the mouse back button closes it. A swipe from the very left edge still opens the sidebar.
 
-**Header bar controls (right side):**
+**Top bar title:** shows the current view's name (an album, a person, a tag, Favorites, and so on).
 
-- source selector dropdown (**Remote / Local / Unified**)
-- sort selector (**Newest / Filename / File Type / Sync State**)
-- search entry with search mode selector
-- Timeline toggle button
-- select-mode toggle button
-- Upload button (invokes the manual multi-file picker)
-- refresh button
-- gear button (opens Settings)
+**Mobile:** on narrow windows (under 600 px) a bar at the bottom switches between **Photos**, **Explore**, **Albums**, and **People**. It hides while you're selecting photos.
+
+**Turned-off features:** when the library opens (and on refresh) it reads Immich's server features and your account's **Features** settings, and hides what's turned off:
+
+| Turned off | Hidden in Mimick |
+| :--- | :--- |
+| Trash (server) | **Trash**; deleting then warns that it's permanent |
+| Face recognition (server) or People (account) | **People**, the bottom-bar People button, and Explore's people row |
+| Smart search (server) | the **Smart Search** mode and Explore's Things |
+| OCR (server) | the **OCR** search mode and the OCR filter |
+| Reverse geocoding (server) | Explore's Places |
+| Search (server) | **Search** |
+| Tags (account) | **Tags**, the lightbox's Tags section, and the Tag search filter |
+| Folders / Shared Links (account) | **Folders** / **Shared Links** |
+| Ratings (account) | the Rating search filter |
+
+If Mimick can't read these settings (for example, an API key without `userPreference.read`), everything stays visible.
+
+**Controls row** (one row above the content, at every window width):
+
+- **Timeline** toggle, on Photos only
+- source selector (**Remote / Local / Unified**), inside albums only
+- sort selector (**Newest / Filename / File Type**, or the album sorts on the Albums page), where there's something to sort
+- **Upload** button (invokes the manual multi-file picker)
 
 | Search Options | View Options |
 | :---: | :---: |
@@ -345,9 +364,17 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 - Click a face to see that person's photos.
 - The **⋯** button on each face has:
   - **Rename…** (or **Add Name…**)
+  - **Add to Favorites** / **Remove from Favorites**: favorites get a heart on their face and are listed first.
   - **Set Birthday…**: pick a date, or **Remove** it.
   - **Hide** / **Unhide**: hidden people don't appear in People or Explore.
   - **Merge People…**: tick the people who are really this person; their faces move to them. This can't be undone.
+
+---
+
+## Editing Albums
+
+- Rename an album or edit its description from the album's header (**⋯** menu) or by right-clicking its tile on the Albums page. Only your own albums can be edited.
+- Renaming keeps linked watch folders linked: Mimick updates the folder's album name in your settings.
 
 ---
 
@@ -406,3 +433,4 @@ The **Trash** sidebar entry lists everything in the Immich trash in the normal g
 | **F** | Toggle favorite for the current asset (lightbox) |
 | **A** | Archive or unarchive the current asset (lightbox) |
 | **Alt+Left** / mouse back | Go back to the previous view (mouse back also closes the lightbox) |
+| **Alt+Right** / mouse forward | Go forward again after going back |

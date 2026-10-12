@@ -14,6 +14,8 @@ pub struct PersonUpdate {
     pub is_hidden: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub birth_date: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_favorite: Option<bool>,
 }
 
 impl ImmichApiClient {
@@ -76,6 +78,18 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&clear).unwrap(),
             serde_json::json!({ "birthDate": null })
+        );
+    }
+
+    #[test]
+    fn favorite_update_sends_is_favorite() {
+        let favorite = PersonUpdate {
+            is_favorite: Some(true),
+            ..PersonUpdate::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&favorite).unwrap(),
+            serde_json::json!({ "isFavorite": true })
         );
     }
 

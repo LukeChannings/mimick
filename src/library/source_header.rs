@@ -180,8 +180,7 @@ pub(super) fn show(ui: &Rc<LibraryWindowUi>, source: &LibrarySource) {
     clear_actions(header);
     let (leading, title) = basics(ui, source);
     set_leading(ui, leading);
-    header.title.set_label(&title);
-    header.title.set_tooltip_text(Some(&title));
+    set_title(ui, &title);
     enrich(ui, source);
 }
 
@@ -318,11 +317,19 @@ fn enrich_album(ui: &Rc<LibraryWindowUi>, album_id: String) {
 
 fn show_album(ui: &Rc<LibraryWindowUi>, album: LibraryAlbum, me: &str) {
     let header = &ui.header;
-    header.title.set_label(&album.album_name);
+    set_title(ui, &album.album_name);
     *header.count.borrow_mut() = Some(count_label(album.asset_count.into()));
     set_details(header, album_details(&album, me));
     set_description(header, Some(&album.description));
     if owns_album(&album, me) {
+        let menu = gtk::MenuButton::builder()
+            .icon_name("view-more-symbolic")
+            .tooltip_text("More")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat"])
+            .build();
+        popover_menu(&menu, super::album_edit::album_menu_items(ui, &album));
+        header.actions.append(&menu);
         let (ui_share, share_album) = (ui.clone(), album.clone());
         add_action(header, "emblem-shared-symbolic", "Share album", move || {
             super::album_share_dialog::present(ui_share.clone(), share_album.clone())
@@ -356,7 +363,7 @@ fn enrich_person(ui: &Rc<LibraryWindowUi>, person_id: String) {
             } else {
                 person.name.clone()
             };
-            header.title.set_label(&name);
+            set_title(ui, &name);
             *header.count.borrow_mut() = count.map(count_label);
             let today = chrono::Local::now().date_naive();
             let mut details = person_details(person.birth_date.as_deref(), today);
@@ -370,10 +377,27 @@ fn enrich_person(ui: &Rc<LibraryWindowUi>, person_id: String) {
                 .valign(gtk::Align::Center)
                 .css_classes(["flat"])
                 .build();
+            add_favorite_toggle(ui, &person);
             popover_menu(&menu, super::people_view::person_menu_items(ui, &person));
             header.actions.append(&menu);
         }) as Box<dyn FnOnce(&Rc<LibraryWindowUi>)>)
     });
+}
+
+fn add_favorite_toggle(ui: &Rc<LibraryWindowUi>, person: &crate::api_client::Person) {
+    let favorite = person.is_favorite;
+    let tooltip = if favorite {
+        "Remove from favorites"
+    } else {
+        "Add to favorites"
+    };
+    let (ui_toggle, person) = (ui.clone(), person.clone());
+    add_action(
+        &ui.header,
+        super::favorites::heart_icon(favorite),
+        tooltip,
+        move || super::people_view::set_favorite(&ui_toggle, &person, !favorite),
+    );
 }
 
 fn enrich_tag(ui: &Rc<LibraryWindowUi>, tag_id: String, value: String) {
@@ -394,7 +418,7 @@ fn enrich_tag(ui: &Rc<LibraryWindowUi>, tag_id: String, value: String) {
         let tag = tags.into_iter().find(|tag| tag.id == tag_id)?;
         Some(Box::new(move |ui: &Rc<LibraryWindowUi>| {
             let header = &ui.header;
-            header.title.set_label(&tag.name);
+            set_title(ui, &tag.name);
             set_leading(ui, Leading::TagColor(tag.color.clone()));
             let menu = gtk::MenuButton::builder()
                 .icon_name("view-more-symbolic")
@@ -406,6 +430,12 @@ fn enrich_tag(ui: &Rc<LibraryWindowUi>, tag_id: String, value: String) {
             header.actions.append(&menu);
         }) as Box<dyn FnOnce(&Rc<LibraryWindowUi>)>)
     });
+}
+
+fn set_title(ui: &LibraryWindowUi, title: &str) {
+    ui.header.title.set_label(title);
+    ui.header.title.set_tooltip_text(Some(title));
+    super::navigation::set_view_title(ui, title);
 }
 
 fn set_leading(ui: &LibraryWindowUi, leading: Leading) {

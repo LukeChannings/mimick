@@ -159,6 +159,7 @@ pub struct LibraryState {
     /// popped by `navigate_back`. Searches are not pushed (they are ephemeral).
     /// `VecDeque` for O(1) front pops when the 50-entry cap is hit.
     pub nav_history: VecDeque<Location>,
+    pub forward_history: Vec<Location>,
     pub location: Location,
     pub sort_mode: LibrarySortMode,
     pub load_state: LibraryLoadState,
@@ -178,6 +179,7 @@ impl Default for LibraryState {
             source: LibrarySource::AllAssets,
             previous_non_search_source: LibrarySource::AllAssets,
             nav_history: VecDeque::new(),
+            forward_history: Vec::new(),
             location: Location::Source(LibrarySource::AllAssets),
             sort_mode: LibrarySortMode::NewestFirst,
             load_state: LibraryLoadState::Idle,
@@ -219,31 +221,6 @@ impl LibraryState {
         self.generation = self.generation.saturating_add(1);
         self.load_state = LibraryLoadState::Loading;
         (self.generation, source, 1)
-    }
-
-    pub fn navigate_to(&mut self, location: Location) -> bool {
-        if self.location == location {
-            return false;
-        }
-        let replace = self.location.is_search() && location.is_search();
-        if !replace && self.nav_history.back() != Some(&self.location) {
-            self.nav_history.push_back(self.location.clone());
-            if self.nav_history.len() > 50 {
-                self.nav_history.pop_front();
-            }
-        }
-        self.location = location;
-        true
-    }
-
-    pub fn navigate_back(&mut self) -> Option<Location> {
-        let previous = self.nav_history.pop_back()?;
-        self.location = previous.clone();
-        Some(previous)
-    }
-
-    pub fn can_go_back(&self) -> bool {
-        !self.nav_history.is_empty()
     }
 
     pub fn load_next_page_if_needed(&mut self) -> Option<(u64, LibrarySource, u32)> {
@@ -472,79 +449,5 @@ mod tests {
         let (_, source, page) = state.clear_search_restore_previous_source().unwrap();
         assert!(matches!(source, LibrarySource::Album { .. }));
         assert_eq!(page, 1);
-    }
-
-    fn source(source: LibrarySource) -> Location {
-        Location::Source(source)
-    }
-
-    #[test]
-    fn navigate_back_pops_history() {
-        let mut state = LibraryState::new();
-        state.navigate_to(Location::Page(LibraryPage::Albums { shared_only: false }));
-        state.navigate_to(source(LibrarySource::Album {
-            id: "a1".into(),
-            name: "Trips".into(),
-        }));
-
-        assert!(state.can_go_back());
-        assert_eq!(
-            state.navigate_back(),
-            Some(Location::Page(LibraryPage::Albums { shared_only: false }))
-        );
-        assert_eq!(
-            state.navigate_back(),
-            Some(source(LibrarySource::AllAssets))
-        );
-        assert!(!state.can_go_back());
-        assert!(state.navigate_back().is_none());
-    }
-
-    #[test]
-    fn navigating_to_the_current_location_is_a_noop() {
-        let mut state = LibraryState::new();
-        assert!(!state.navigate_to(source(LibrarySource::AllAssets)));
-        assert!(!state.can_go_back());
-    }
-
-    #[test]
-    fn refining_a_search_replaces_it_but_leaving_it_keeps_it() {
-        let mut state = LibraryState::new();
-        state.navigate_to(Location::Page(LibraryPage::Search));
-        state.navigate_to(source(LibrarySource::SmartSearch {
-            query: "sun".into(),
-        }));
-        state.navigate_to(source(LibrarySource::SmartSearch {
-            query: "sunset".into(),
-        }));
-        state.navigate_to(source(LibrarySource::Trash));
-
-        assert_eq!(
-            state.navigate_back(),
-            Some(source(LibrarySource::SmartSearch {
-                query: "sunset".into()
-            }))
-        );
-        assert_eq!(
-            state.navigate_back(),
-            Some(Location::Page(LibraryPage::Search))
-        );
-        assert_eq!(
-            state.navigate_back(),
-            Some(source(LibrarySource::AllAssets))
-        );
-    }
-
-    #[test]
-    fn tag_drill_down_is_recorded() {
-        let mut state = LibraryState::new();
-        state.navigate_to(Location::Page(LibraryPage::Tags { path: None }));
-        state.navigate_to(Location::Page(LibraryPage::Tags {
-            path: Some("Trips".into()),
-        }));
-        assert_eq!(
-            state.navigate_back(),
-            Some(Location::Page(LibraryPage::Tags { path: None }))
-        );
     }
 }

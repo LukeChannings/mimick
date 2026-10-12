@@ -1820,7 +1820,10 @@ impl Lightbox {
             let Ok(details) = result else {
                 return;
             };
-            if !asset_id.starts_with(LOCAL_ID_PREFIX) && !trash_view::is_trash_active(&lb.ui) {
+            if !asset_id.starts_with(LOCAL_ID_PREFIX)
+                && !trash_view::is_trash_active(&lb.ui)
+                && lb.ui.features.get().tags
+            {
                 lb.details.tags.show(&asset_id, details.tags);
             }
             if let Some(exif) = details.exif_info {

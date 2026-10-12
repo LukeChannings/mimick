@@ -19,12 +19,31 @@ pub struct SidebarParts {
     pub root: gtk::Box,
     pub connection_row: libadwaita::ActionRow,
     pub server_row: libadwaita::ActionRow,
-    pub fixed_list: gtk::ListBox,
+    pub fixed_lists: Vec<gtk::ListBox>,
     pub albums_list: gtk::ListBox,
     recent_expander: gtk::ToggleButton,
     recent_rows: Vec<libadwaita::ActionRow>,
     album_signature: RefCell<Vec<(String, String, u32)>>,
 }
+
+const GROUPS: [(&str, &[&str]); 3] = [
+    (
+        "Library",
+        &[
+            "photos",
+            "explore",
+            "people",
+            "favorites",
+            "archive",
+            "trash",
+        ],
+    ),
+    (
+        "Albums & Sharing",
+        &["albums", "shared-albums", "shared-links", "sharing"],
+    ),
+    ("Browse", &["search", "tags", "folders"]),
+];
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
 const FIXED_ROWS: [(&str, &str, &str, &str); 13] = [
@@ -152,31 +171,21 @@ pub fn build_sidebar() -> SidebarParts {
         .width_request(200)
         .build();
 
-    let fixed_list = selectable_list();
     let (connection_list, connection_row, server_row) = build_footer();
     let recent_rows: Vec<libadwaita::ActionRow> = (0..RECENT_ALBUM_COUNT)
         .map(|_| recent_album_row())
         .collect();
     let recent_expander = build_recent_expander(recent_rows.clone());
-    for (title, subtitle, icon, key) in FIXED_ROWS {
-        let row = action_row(title, subtitle, icon, key);
-        fixed_list.append(&row);
-        if key == "albums" {
-            row.add_suffix(&recent_expander);
-            for recent in &recent_rows {
-                fixed_list.append(recent);
-            }
-        }
-    }
+    let (groups, fixed_lists) = build_groups(&recent_expander, &recent_rows);
     let (albums_expander, albums_list) = build_all_albums();
-    root.append(&scrolling_lists(&fixed_list, &albums_expander));
+    root.append(&scrolling_lists(&groups, &albums_expander));
     root.append(&connection_list);
 
     SidebarParts {
         root,
         connection_row,
         server_row,
-        fixed_list,
+        fixed_lists,
         albums_list,
         recent_expander,
         recent_rows,
@@ -186,18 +195,102 @@ pub fn build_sidebar() -> SidebarParts {
 
 // The fixed rows and albums scroll together so the sidebar fits short (720 px) screens;
 // only the connection footer stays pinned.
-fn scrolling_lists(fixed_list: &gtk::ListBox, albums: &gtk::Expander) -> gtk::ScrolledWindow {
+fn scrolling_lists(groups: &gtk::Box, albums: &gtk::Expander) -> gtk::ScrolledWindow {
     let lists = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(12)
         .build();
-    lists.append(fixed_list);
+    lists.append(groups);
     lists.append(albums);
     gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vexpand(true)
         .child(&lists)
         .build()
+}
+
+fn build_groups(
+    recent_expander: &gtk::ToggleButton,
+    recent_rows: &[libadwaita::ActionRow],
+) -> (gtk::Box, Vec<gtk::ListBox>) {
+    let container = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(8)
+        .build();
+    let mut lists = Vec::new();
+    for (heading, keys) in GROUPS {
+        container.append(&section_heading(heading));
+        let list = selectable_list();
+        for &(title, subtitle, icon, key) in FIXED_ROWS.iter().filter(|row| keys.contains(&row.3)) {
+            let row = action_row(title, subtitle, icon, key);
+            list.append(&row);
+            if key == "albums" {
+                row.add_suffix(recent_expander);
+                for recent in recent_rows {
+                    list.append(recent);
+                }
+            }
+        }
+        container.append(&list);
+        lists.push(list);
+    }
+    (container, lists)
+}
+
+fn section_heading(text: &str) -> gtk::Label {
+    gtk::Label::builder()
+        .label(text)
+        .xalign(0.0)
+        .margin_top(6)
+        .css_classes(vec!["heading".to_string(), "dim-label".to_string()])
+        .build()
+}
+
+pub fn select_fixed(parts: &SidebarParts, key: &str) {
+    let row = parts.fixed_lists.iter().find_map(|list| {
+        let mut child = list.first_child();
+        while let Some(widget) = child {
+            child = widget.next_sibling();
+            if let Ok(row) = widget.downcast::<gtk::ListBoxRow>()
+                && row.tooltip_text().as_deref() == Some(key)
+            {
+                return Some(row);
+            }
+        }
+        None
+    });
+    match row {
+        Some(row) => select_fixed_row(parts, &row),
+        None => unselect_fixed(parts),
+    }
+}
+
+pub fn select_fixed_row(parts: &SidebarParts, row: &gtk::ListBoxRow) {
+    for list in &parts.fixed_lists {
+        if row.parent().as_ref() == Some(list.upcast_ref()) {
+            list.select_row(Some(row));
+        } else {
+            list.unselect_all();
+        }
+    }
+}
+
+pub fn set_row_visible(parts: &SidebarParts, key: &str, visible: bool) {
+    for list in &parts.fixed_lists {
+        let mut child = list.first_child();
+        while let Some(widget) = child {
+            child = widget.next_sibling();
+            if widget.tooltip_text().as_deref() == Some(key) {
+                widget.set_visible(visible);
+            }
+        }
+    }
+}
+
+pub fn unselect_fixed(parts: &SidebarParts) {
+    for list in &parts.fixed_lists {
+        list.unselect_all();
+    }
 }
 
 fn build_recent_expander(rows: Vec<libadwaita::ActionRow>) -> gtk::ToggleButton {
@@ -369,5 +462,18 @@ mod tests {
             .map(|a| a.id.as_str())
             .collect();
         assert_eq!(ids, ["d", "b", "c"]);
+    }
+
+    #[test]
+    fn every_row_sits_in_exactly_one_group() {
+        for (_, _, _, key) in FIXED_ROWS {
+            let groups = GROUPS
+                .iter()
+                .filter(|(_, keys)| keys.contains(&key))
+                .count();
+            assert_eq!(groups, 1, "{key}");
+        }
+        let grouped: usize = GROUPS.iter().map(|(_, keys)| keys.len()).sum();
+        assert_eq!(grouped, FIXED_ROWS.len());
     }
 }

@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Sharing sidebar page for partner sharing: see who you share your library with and who shares with you, add partners, or stop sharing (#236).
 - Added a header to every photo view: albums show their item count, dates, sharing, description, share and folder-link actions; people show their face, photo count, age, and person menu; tags, places, folders, favorites, archive, and searches show their counts and details. The header scrolls away with the photos.
 - Added mouse back-button support in the library window.
+- Added Forward navigation (**Alt+Right** or the mouse forward button) and swipe right to go back on touch screens.
+- Added a bottom navigation bar (Photos, Explore, Albums, People) on narrow windows.
+- Added favorite people: a heart on favorited faces, favorites listed first, and favorite toggles in the person menu and header.
+- The library now hides pages and options for features that are turned off on the server or in your Immich account settings (Trash, People, Tags, Folders, Shared Links, Search, smart and OCR search, Explore's places and things, and the rating and tag search filters). With the server's trash off, deleting says it's permanent.
+- Added renaming albums and editing their descriptions, from the album header or the album tile menu; linked watch folders stay linked.
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
@@ -32,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Archived photos no longer appear in the Photos timeline, matching Immich (#239).
 - Back now returns to pages too (Albums, People, Explore, Tags and Folders levels, Search), and people, places, and things opened from Explore, and tags clicked in the lightbox, open as titled views instead of anonymous searches.
 - The album linked-folder row and the Trash's Restore All / Empty Trash bar moved into the view header.
+- The library controls are now one row on narrow windows, and the Timeline toggle and sort menu only appear where they apply.
+- The library sidebar is grouped into Library, Albums & Sharing, and Browse sections.
+- The library's top bar now shows the current view's name.
+- Faces on the People page are larger.
+- The library's bottom transfer bar is replaced by a small upload/download indicator in the top bar, shown only while a transfer is running.
 - Bumped Flatpak runtime and CI builder image to GNOME 51.
 - Updated GitHub Actions dependencies (`taiki-e/install-action`, `github/codeql-action`).
 - Redesigned tags in the details pane as colored pill chips with an inline remove button, a "+" header button, and an empty state.
@@ -45,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The library's phone layout (narrow breakpoint) now applies below 600 px; an overlapping breakpoint kept it from ever taking effect.
 - Fixed an issue where the app could hang on startup or while saving credentials if the XDG Secret portal was misconfigured by enforcing a 5-second deadline for connecting to the keyring (#218).
 - Hardened API-key fallback storage with atomic writes and enforced owner-only (`0600`) permissions on Unix (#215).
 - The API-key fallback file now takes precedence over an older keyring entry, and Settings warns when the key is stored in a file instead of the keyring (#215).

@@ -33,7 +33,6 @@ use self::controls::{
     connect_controls, connect_grid_handlers, connect_sidebar_handlers,
     refresh_library_after_mutation,
 };
-use self::download::format_rate;
 use self::lightbox::open_lightbox;
 
 pub(super) const LOCAL_ID_PREFIX: &str = "local::";
@@ -43,6 +42,7 @@ pub mod albums_view;
 mod archive;
 pub mod asset_model;
 pub mod asset_object;
+mod bottom_nav;
 pub mod explore_view;
 mod favorites;
 pub mod local_exif;
@@ -55,6 +55,7 @@ pub mod thumbnail_cache;
 
 mod about_dialog;
 mod actions;
+mod album_edit;
 mod album_link;
 mod album_share_dialog;
 mod asset_edit;
@@ -63,9 +64,11 @@ mod context_menu;
 mod controls;
 mod dialogs;
 mod download;
+mod features;
 mod folders_view;
 mod header_format;
 mod lightbox;
+mod nav_history;
 mod navigation;
 mod people_view;
 mod person_merge_dialog;
@@ -123,6 +126,8 @@ struct LibraryWindowUi {
     folders: folders_view::FoldersView,
     sharing: sharing_view::SharingView,
     header: source_header::SourceHeader,
+    bottom_nav: bottom_nav::BottomNav,
+    features: Cell<crate::api_client::LibraryFeatures>,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer: window_layout::TransferParts,
@@ -176,6 +181,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     people_view::connect_people_view(ui.clone());
     tags_view::connect_tags_view(ui.clone());
     sharing_view::connect_sharing_view(ui.clone());
+    bottom_nav::connect_bottom_nav(&ui);
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
     connect_grid_handlers(ui.clone());
@@ -217,6 +223,10 @@ fn connect_menus(ui: Rc<LibraryWindowUi>) {
             albums_view::AlbumAction::Share => {
                 album_share_dialog::present(ui_for_share.clone(), album)
             }
+            albums_view::AlbumAction::Rename => album_edit::rename(&ui_for_share, &album),
+            albums_view::AlbumAction::EditDescription => {
+                album_edit::edit_description(&ui_for_share, &album)
+            }
             albums_view::AlbumAction::CreateLink => shared_link_dialog::present(
                 ui_for_share.clone(),
                 shared_link_dialog::LinkDialogMode::Create(SharedLinkTarget::Album(album.id)),
@@ -235,8 +245,10 @@ fn bootstrap_window(ui: Rc<LibraryWindowUi>) {
 
     apply_timeline_ui_state(&ui, &initial_request.1);
     source_header::show(&ui, &initial_request.1);
+    navigation::sync_controls(&ui, &Location::Source(initial_request.1.clone()));
     load_albums(ui.clone());
     load_status(ui.clone());
+    features::load(&ui);
     fetch_current_user(ui.clone());
     connect_albums_create(ui.clone());
     spawn_server_ping_loop(ui.clone());
@@ -363,7 +375,7 @@ fn dispatch_search_from_view(ui: &Rc<LibraryWindowUi>) {
     let query = ui.search_view.search_entry.text().trim().to_string();
     let filters = search_view::collect_filters(&ui.search_view);
     let has_filters = filters != MetadataSearchFilters::default();
-    let mode = ui.search_view.search_mode.selected(); // 0=Smart, 1=Filename, 2=OCR
+    let mode = search_view::selected_mode(&ui.search_view); // 0=Smart, 1=Filename, 2=OCR
 
     let source = build_search_source(mode, &query, has_filters, filters);
     let Some(source) = source else {
@@ -924,12 +936,15 @@ fn load_explore_landing(ui: Rc<LibraryWindowUi>) {
     explore_view::show_loading(&ui.explore);
     ui.content_stack.set_visible_child_name("explore");
 
-    load_explore_people(ui.clone());
+    let sections = ui.explore.sections.get();
+    if sections.people {
+        load_explore_people(ui.clone());
+    }
     // Fetch places (slow paginated scan) only if not cached.
-    if explore_view::has_cached_places(&ui.explore) {
+    if sections.places && explore_view::has_cached_places(&ui.explore) {
         log::debug!("Explore: rendering places from cache");
         explore_view::render_cached_places(&ui.explore, ui.ctx.clone());
-    } else {
+    } else if sections.places {
         log::debug!("Explore: places cache empty, fetching from server");
         load_explore_places(ui.clone());
     }
@@ -1352,7 +1367,7 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         if had_focus {
             match ui.sidebar.albums_list.selected_row() {
                 Some(row) => row.grab_focus(),
-                None => ui.sidebar.fixed_list.grab_focus(),
+                None => ui.sidebar.fixed_lists[0].grab_focus(),
             };
         }
         return;
@@ -1439,32 +1454,15 @@ fn update_transfer_ui(ui: &LibraryWindowUi) {
         }
         state.transfer.clone()
     };
+    ui.transfer.indicator.set_visible(transfer.active);
     if !transfer.active {
-        ui.transfer.bar.remove_css_class("active");
-        ui.transfer.progress.set_fraction(0.0);
-        ui.transfer.icon.set_visible(false);
-        let idle_summary =
-            if transfer.last_upload_avg_bps > 0.0 || transfer.last_download_avg_bps > 0.0 {
-                format!(
-                    "Idle  Last upload avg {}  Last download avg {}",
-                    format_rate(transfer.last_upload_avg_bps),
-                    format_rate(transfer.last_download_avg_bps)
-                )
-            } else {
-                "Idle  No recent transfer session".to_string()
-            };
-        ui.transfer.label.set_label(&idle_summary);
         return;
     }
-    ui.transfer.bar.add_css_class("active");
-
     let icon_name = match transfer.direction {
         TransferDirection::Upload => "mimick-upload-symbolic",
         TransferDirection::Download => "mimick-download-symbolic",
     };
     ui.transfer.icon.set_icon_name(Some(icon_name));
-    ui.transfer.icon.set_visible(true);
-
     let detail = transfer
         .active_item_label
         .as_deref()
@@ -1472,20 +1470,13 @@ fn update_transfer_ui(ui: &LibraryWindowUi) {
             TransferDirection::Upload => "queued asset",
             TransferDirection::Download => "selected asset",
         });
-    let live_speed = format_rate(transfer.instant_bps);
-    let avg_speed = format_rate(transfer.session_avg_bps);
-    let summary = format!("{detail}  {live_speed}  avg {avg_speed}");
-    ui.transfer.label.set_label(&summary);
-
+    ui.transfer.indicator.set_tooltip_text(Some(detail));
     match transfer.total_bytes {
         Some(total) if total > 0 => {
-            ui.transfer.progress.set_show_text(false);
             let fraction = (transfer.current_bytes as f64 / total as f64).clamp(0.0, 1.0);
             ui.transfer.progress.set_fraction(fraction);
         }
-        _ => {
-            ui.transfer.progress.pulse();
-        }
+        _ => ui.transfer.progress.pulse(),
     }
 }
 

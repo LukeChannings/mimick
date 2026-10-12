@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 use super::errors::{RequestContext, classify_http_issue, classify_network_issue};
-use super::{AlbumSummary, ApiIssue, ImmichApiClient};
+use super::{AlbumSummary, AlbumUpdate, ApiIssue, ImmichApiClient};
 
 impl ImmichApiClient {
     /// Retrieve all albums from the Immich server, populating the local in-memory cache.
@@ -509,5 +509,13 @@ impl ImmichApiClient {
                 false
             }
         }
+    }
+
+    pub async fn update_album(&self, album_id: &str, update: &AlbumUpdate) -> Result<(), String> {
+        let body = serde_json::to_value(update).map_err(|err| err.to_string())?;
+        let path = format!("/api/albums/{album_id}");
+        self.send_json(reqwest::Method::PATCH, &path, Some(body))
+            .await
+            .map(|_| ())
     }
 }

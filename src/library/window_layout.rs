@@ -41,10 +41,9 @@ pub(super) struct ControlsParts {
 }
 
 pub(super) struct TransferParts {
-    pub bar: gtk::Box,
-    pub progress: gtk::ProgressBar,
+    pub indicator: gtk::Box,
     pub icon: gtk::Image,
-    pub label: gtk::Label,
+    pub progress: gtk::ProgressBar,
 }
 
 pub(super) struct AlbumLinkParts {
@@ -78,6 +77,7 @@ pub(super) struct ContentParts {
     folders: super::folders_view::FoldersView,
     sharing: super::sharing_view::SharingView,
     header: super::source_header::SourceHeader,
+    bottom_nav: super::bottom_nav::BottomNav,
     search_view: SearchViewParts,
     controls: ControlsParts,
     banner: gtk::Label,
@@ -120,8 +120,9 @@ impl WindowParts {
             &header.sidebar_toggle,
         );
         let nav = build_nav(&window, &header.header, &split);
+        header.header.pack_end(&content.transfer.indicator);
 
-        add_narrow_breakpoint(&window, narrow, &content, &header.back_button);
+        add_narrow_breakpoint(&window, narrow, &content);
         add_desktop_breakpoint(&window, &content, &split);
         add_sidebar_shortcut(&window, &split);
         Self {
@@ -173,12 +174,13 @@ impl ContentParts {
             folders,
             sharing,
             header,
+            bottom_nav: super::bottom_nav::build_bottom_nav(),
             search_view: build_search_view(),
             controls: build_controls(),
             banner: build_timeline_banner(),
             stack,
             error_label,
-            transfer: build_transfer_bar(),
+            transfer: build_transfer_indicator(),
             album_link,
             bulk,
         }
@@ -193,8 +195,8 @@ impl ContentParts {
         column.append(&self.search_view.root);
         column.append(&self.banner);
         column.append(&self.stack);
+        column.append(&self.bottom_nav.root);
         column.append(&self.bulk.bar);
-        column.append(&self.transfer.bar);
         column
     }
 }
@@ -222,6 +224,8 @@ impl LibraryWindowUi {
             folders: content.folders,
             sharing: content.sharing,
             header: content.header,
+            bottom_nav: content.bottom_nav,
+            features: Cell::default(),
             content_stack: content.stack,
             error_label: content.error_label,
             transfer: content.transfer,
@@ -332,19 +336,18 @@ fn build_controls() -> ControlsParts {
     let upload_button = pressable_button("document-send-symbolic", "Upload to library");
     upload_button.add_css_class("suggested-action");
 
-    let root = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(12)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(8)
-        .margin_end(8)
-        .build();
-    root.append(&hbox(&[
-        source_revealer.upcast_ref(),
+    let spacer = gtk::Box::builder().hexpand(true).build();
+    let root = hbox(&[
         timeline_toggle.upcast_ref(),
-    ]));
-    root.append(&hbox(&[sort_mode.upcast_ref(), upload_button.upcast_ref()]));
+        source_revealer.upcast_ref(),
+        sort_mode.upcast_ref(),
+        spacer.upcast_ref(),
+        upload_button.upcast_ref(),
+    ]);
+    root.set_margin_top(8);
+    root.set_margin_bottom(8);
+    root.set_margin_start(8);
+    root.set_margin_end(8);
     ControlsParts {
         root,
         source_mode,
@@ -404,42 +407,24 @@ fn build_content_stack(
     (stack, error_label)
 }
 
-fn build_transfer_bar() -> TransferParts {
+fn build_transfer_indicator() -> TransferParts {
+    let icon = gtk::Image::from_icon_name("mimick-upload-symbolic");
     let progress = gtk::ProgressBar::builder()
-        .hexpand(true)
+        .width_request(28)
         .valign(gtk::Align::Center)
-        .css_classes(vec!["mimick-transfer-progress".to_string()])
+        .css_classes(["mimick-transfer-mini"])
         .build();
-    let icon = gtk::Image::builder()
-        .icon_size(gtk::IconSize::Normal)
-        .css_classes(vec!["dim-label".to_string()])
+    let indicator = gtk::Box::builder()
+        .spacing(4)
+        .valign(gtk::Align::Center)
         .visible(false)
         .build();
-    let label = gtk::Label::builder()
-        .xalign(0.0)
-        .hexpand(true)
-        .wrap(true)
-        .max_width_chars(24)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .css_classes(vec!["caption".to_string(), "dim-label".to_string()])
-        .build();
-    let bar = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(12)
-        .margin_top(8)
-        .margin_bottom(16)
-        .margin_start(12)
-        .margin_end(12)
-        .css_classes(vec!["mimick-transfer-shell".to_string()])
-        .build();
-    bar.append(&progress);
-    bar.append(&icon);
-    bar.append(&label);
+    indicator.append(&icon);
+    indicator.append(&progress);
     TransferParts {
-        bar,
-        progress,
+        indicator,
         icon,
-        label,
+        progress,
     }
 }
 
@@ -602,16 +587,14 @@ fn breakpoint(condition: &str) -> libadwaita::Breakpoint {
     )
 }
 
-/// Phone width: hide the transfer bar and back button, and switch the grid to narrow layout.
+/// Phone width: show the bottom navigation bar and switch the grid to narrow layout.
 fn add_narrow_breakpoint(
     window: &libadwaita::ApplicationWindow,
     narrow: Rc<Cell<bool>>,
     content: &ContentParts,
-    back_button: &gtk::Button,
 ) {
     let narrow_bp = breakpoint("max-width: 600px");
-    narrow_bp.add_setter(&content.transfer.bar, "visible", Some(&false.to_value()));
-    narrow_bp.add_setter(back_button, "visible", Some(&false.to_value()));
+    narrow_bp.add_setter(&content.bottom_nav.root, "visible", Some(&true.to_value()));
     let (narrow_apply, canvas_apply) = (narrow.clone(), content.grid.canvas.clone());
     narrow_bp.connect_apply(move |_| {
         log::info!("NARROW breakpoint APPLIED: setting narrow=true");
@@ -638,11 +621,6 @@ fn add_desktop_breakpoint(
     desktop_bp.connect_apply(move |_| window_apply.add_css_class("mimick-wide"));
     let window_unapply = window.clone();
     desktop_bp.connect_unapply(move |_| window_unapply.remove_css_class("mimick-wide"));
-    desktop_bp.add_setter(
-        &content.controls.root,
-        "orientation",
-        Some(&gtk::Orientation::Horizontal.to_value()),
-    );
     desktop_bp.add_setter(split, "collapsed", Some(&false.to_value()));
     desktop_bp.add_setter(
         &content.album_link.sync_button,
@@ -656,7 +634,7 @@ fn add_desktop_breakpoint(
     );
     window.add_breakpoint(desktop_bp);
     // Tablet width: reserved for chrome tweaks below typical desktop widths.
-    window.add_breakpoint(breakpoint("max-width: 1000px"));
+    window.add_breakpoint(breakpoint("min-width: 600px and max-width: 1000px"));
 }
 
 /// F9 toggles the sidebar.

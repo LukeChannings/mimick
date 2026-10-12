@@ -228,6 +228,28 @@ pub fn watch_entry_for_album<'a>(
         .find(|entry| entry.album_name() == Some(album_name))
 }
 
+pub fn rename_album_in_watch_paths(
+    entries: &mut [WatchPathEntry],
+    album_id: &str,
+    old_name: &str,
+    new_name: &str,
+) -> bool {
+    let mut changed = false;
+    for entry in entries.iter_mut() {
+        if let WatchPathEntry::WithConfig {
+            album_id: id,
+            album_name: Some(name),
+            ..
+        } = entry
+            && (id.as_deref() == Some(album_id) || (id.is_none() && name == old_name))
+        {
+            *name = new_name.to_string();
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Catch-up strategy applied to existing files when the application boots.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq)]
 pub enum StartupCatchupMode {
@@ -1138,5 +1160,38 @@ mod tests {
         let message = keyring_error_message(&KeyringError::Timeout("Keyring connection"));
         assert!(message.contains("did not respond"));
         assert!(message.contains("wiki/Keyring-Setup"));
+    }
+
+    #[test]
+    fn renaming_an_album_updates_linked_watch_paths() {
+        let entry = |id: Option<&str>, name: &str| WatchPathEntry::WithConfig {
+            path: "/p".into(),
+            album_id: id.map(str::to_string),
+            album_name: Some(name.into()),
+            rules: FolderRules::default(),
+        };
+        let mut entries = vec![
+            entry(Some("a1"), "Trips"),
+            entry(None, "Trips"),
+            entry(Some("a2"), "Trips"),
+            WatchPathEntry::Simple("/q".into()),
+        ];
+        assert!(rename_album_in_watch_paths(
+            &mut entries,
+            "a1",
+            "Trips",
+            "Holidays"
+        ));
+        let names: Vec<Option<&str>> = entries.iter().map(WatchPathEntry::album_name).collect();
+        assert_eq!(
+            names,
+            [Some("Holidays"), Some("Holidays"), Some("Trips"), None]
+        );
+        assert!(!rename_album_in_watch_paths(
+            &mut entries,
+            "zz",
+            "Nope",
+            "X"
+        ));
     }
 }

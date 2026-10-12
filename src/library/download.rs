@@ -434,13 +434,3 @@ pub(super) fn should_refresh_after_download(ui: &LibraryWindowUi) -> bool {
             | LibrarySource::AlbumUnified { .. }
     )
 }
-
-pub(super) fn format_rate(bytes_per_sec: f64) -> String {
-    if bytes_per_sec >= 1024.0 * 1024.0 {
-        format!("{:.1} MB/s", bytes_per_sec / (1024.0 * 1024.0))
-    } else if bytes_per_sec >= 1024.0 {
-        format!("{:.1} KB/s", bytes_per_sec / 1024.0)
-    } else {
-        format!("{:.0} B/s", bytes_per_sec.max(0.0))
-    }
-}
