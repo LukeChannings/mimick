@@ -27,7 +27,7 @@ pub struct SidebarParts {
 }
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
-const FIXED_ROWS: [(&str, &str, &str, &str); 12] = [
+const FIXED_ROWS: [(&str, &str, &str, &str); 13] = [
     (
         "Photos",
         "Timeline of every photo and video",
@@ -69,6 +69,12 @@ const FIXED_ROWS: [(&str, &str, &str, &str); 12] = [
         "Public links you've created",
         "emblem-shared-symbolic",
         "shared-links",
+    ),
+    (
+        "Sharing",
+        "Partners who share libraries",
+        "system-users-symbolic",
+        "sharing",
     ),
     (
         "Favorites",

@@ -31,6 +31,7 @@ The window uses a sidebar + content split.
 - **People** — everyone Immich has recognized (see [People](#people))
 - **Tags** — your tag tree (see [Tags page](#tags-page))
 - **Folders** — server photos by their original folder (see [Folders](#folders))
+- **Sharing** — partner sharing (see [Partner Sharing](#partner-sharing))
 - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - the arrow on **Albums** expands your three most recently updated albums
@@ -353,6 +354,14 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 
 - The **Folders** sidebar entry shows the folders your photos came from on the server. It opens at the first level that has more than one folder; the path at the top takes you back up.
 - Click a folder to open it. A folder without subfolders opens its photos directly; otherwise **Photos in …** at the top of the list shows the photos in that folder itself.
+
+---
+
+## Partner Sharing
+
+- The **Sharing** sidebar entry lists the partners you share your library with, and the people who share theirs with you.
+- **+** opens **Add Partner**: search for someone and press **Add**. Partners can see all your photos and videos. Listing people needs the `user.read` permission.
+- The trash button next to a partner stops sharing with them.
 
 ---
 

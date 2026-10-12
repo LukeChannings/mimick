@@ -71,6 +71,7 @@ pub mod search_view;
 mod server_stats_dialog;
 mod shared_link_dialog;
 mod shared_links_view;
+mod sharing_view;
 pub mod staging_view;
 mod tags_view;
 mod trash_view;
@@ -116,6 +117,7 @@ struct LibraryWindowUi {
     people: people_view::PeopleView,
     tags: tags_view::TagsView,
     folders: folders_view::FoldersView,
+    sharing: sharing_view::SharingView,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -171,6 +173,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     trash_view::connect_trash_controls(ui.clone());
     people_view::connect_people_view(ui.clone());
     tags_view::connect_tags_view(ui.clone());
+    sharing_view::connect_sharing_view(ui.clone());
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
     connect_grid_handlers(ui.clone());

@@ -16,6 +16,8 @@ mod albums;
 mod errors;
 mod folders;
 mod library;
+mod partners;
+pub use partners::PartnerDirection;
 mod people;
 pub use people::PersonUpdate;
 mod search;

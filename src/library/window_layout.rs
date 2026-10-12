@@ -76,6 +76,7 @@ pub(super) struct ContentParts {
     people: super::people_view::PeopleView,
     tags: super::tags_view::TagsView,
     folders: super::folders_view::FoldersView,
+    sharing: super::sharing_view::SharingView,
     search_view: SearchViewParts,
     controls: ControlsParts,
     banner: gtk::Label,
@@ -151,6 +152,8 @@ impl ContentParts {
         stack.add_named(&tags.page.root, Some("tags"));
         let folders = super::folders_view::build_folders_view();
         stack.add_named(&folders.page.root, Some("folders"));
+        let sharing = super::sharing_view::build_sharing_view();
+        stack.add_named(&sharing.root, Some("sharing"));
         Self {
             sidebar: build_sidebar(),
             grid,
@@ -160,6 +163,7 @@ impl ContentParts {
             people,
             tags,
             folders,
+            sharing,
             search_view: build_search_view(),
             controls: build_controls(),
             banner: build_timeline_banner(),
@@ -209,6 +213,7 @@ impl LibraryWindowUi {
             people: content.people,
             tags: content.tags,
             folders: content.folders,
+            sharing: content.sharing,
             content_stack: content.stack,
             error_label: content.error_label,
             transfer_bar: content.transfer.bar,

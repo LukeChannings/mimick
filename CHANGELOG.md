@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a People sidebar page: search people, show hidden ones, open a person's photos, and rename, hide or unhide, set a birthday, or merge people from each face's menu (#235).
 - Added a Tags sidebar page: browse the tag tree, open a tag's photos, and create, rename, recolor, or delete tags. Renaming needs a newer Immich than v3.0.0; older servers show an error (#237).
 - Added a Folders sidebar page to browse server photos by their original folder (#238).
+- Added a Sharing sidebar page for partner sharing: see who you share your library with and who shares with you, add partners, or stop sharing (#236).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
