@@ -17,10 +17,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added favorites: a heart button in the lightbox (or **F**), menu and Edit Info toggles, a heart badge on favorited thumbnails, and a Favorites sidebar entry.
 - Added a Shared Albums sidebar entry, and a Share dialog for your albums (add people, change Viewer/Editor roles, remove people).
 - Added shared links: create a public link from an album, a selection, or the right-click menu (description, expiry, password, download/upload/metadata options), and manage all links from the new Shared Links sidebar entry (copy, edit, delete).
+- Added an Archive sidebar entry, plus Archive / Unarchive in the right-click menu, the lightbox (or **A**), and the selection bar (#239).
+- Added an expander on the Albums sidebar row that shows your three most recently updated albums; the full album list below is now a collapsible **All Albums** section (#240).
+- Added a People sidebar page: search people, show hidden ones, open a person's photos, and rename, hide or unhide, set a birthday, or merge people from each face's menu (#235).
+- Added a Tags sidebar page: browse the tag tree, open a tag's photos, and create, rename, recolor, or delete tags. Renaming needs a newer Immich than v3.0.0; older servers show an error (#237).
+- Added a Folders sidebar page to browse server photos by their original folder (#238).
+- Added a Sharing sidebar page for partner sharing: see who you share your library with and who shares with you, add partners, or stop sharing (#236).
+- Added a header to every photo view: albums show their item count, dates, sharing, description, share and folder-link actions; people show their face, photo count, age, and person menu; tags, places, folders, favorites, archive, and searches show their counts and details. The header scrolls away with the photos.
+- Added mouse back-button support in the library window.
+- Added Forward navigation (**Alt+Right** or the mouse forward button) and swipe right to go back on touch screens.
+- Added a bottom navigation bar (Photos, Explore, Albums, People) on narrow windows.
+- Added favorite people: a heart on favorited faces, favorites listed first, and favorite toggles in the person menu and header.
+- The library now hides pages and options for features that are turned off on the server or in your Immich account settings (Trash, People, Tags, Folders, Shared Links, Search, smart and OCR search, Explore's places and things, and the rating and tag search filters). With the server's trash off, deleting says it's permanent.
+- Added renaming albums and editing their descriptions, from the album header or the album tile menu; linked watch folders stay linked.
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
 
+- Archived photos no longer appear in the Photos timeline, matching Immich (#239).
+- Back now returns to pages too (Albums, People, Explore, Tags and Folders levels, Search), and people, places, and things opened from Explore, and tags clicked in the lightbox, open as titled views instead of anonymous searches.
+- The album linked-folder row and the Trash's Restore All / Empty Trash bar moved into the view header.
+- The library controls are now one row on narrow windows, and the Timeline toggle and sort menu only appear where they apply.
+- The library sidebar is grouped into Library, Albums & Sharing, and Browse sections.
+- The library's top bar now shows the current view's name.
+- Faces on the People page are larger.
+- The library's bottom transfer bar is replaced by a small upload/download indicator in the top bar, shown only while a transfer is running.
 - Bumped Flatpak runtime and CI builder image to GNOME 51.
 - Updated GitHub Actions dependencies (`taiki-e/install-action`, `github/codeql-action`).
 - Redesigned tags in the details pane as colored pill chips with an inline remove button, a "+" header button, and an empty state.
@@ -34,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The library's phone layout (narrow breakpoint) now applies below 600 px; an overlapping breakpoint kept it from ever taking effect.
 - Fixed an issue where the app could hang on startup or while saving credentials if the XDG Secret portal was misconfigured by enforcing a 5-second deadline for connecting to the keyring (#218).
 - Hardened API-key fallback storage with atomic writes and enforced owner-only (`0600`) permissions on Unix (#215).
 - The API-key fallback file now takes precedence over an older keyring entry, and Settings warns when the key is stored in a file instead of the keyring (#215).

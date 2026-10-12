@@ -11,13 +11,14 @@ use gtk::prelude::*;
 use libadwaita::prelude::*;
 
 use crate::library::asset_object::AssetObject;
-use crate::library::state::{LibrarySortMode, LibrarySource};
+use crate::library::state::{LibrarySortMode, LibrarySource, Location};
 use crate::settings_window::{build_settings_window_with_parent, show_queue_inspector};
 
 use super::download::{open_local_with_default_app, spawn_video_handoff};
+use super::navigation;
 use super::{
-    LibraryWindowUi, apply_timeline_ui_state, load_albums, load_source_page, load_status,
-    open_lightbox, refresh_albums_view, update_timeline_banner_if_active,
+    LibraryWindowUi, load_albums, load_source_page, load_status, open_lightbox,
+    update_timeline_banner_if_active,
 };
 
 pub(super) fn connect_controls(ui: Rc<LibraryWindowUi>) {
@@ -76,7 +77,7 @@ fn connect_window_actions(ui: &Rc<LibraryWindowUi>) {
     ));
 }
 
-/// Upload and back buttons, plus the Alt+Left and F5 shortcuts.
+/// Upload button and the F5 shortcut; Back is wired in `connect_back_controls`.
 fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
     ui.upload_button.connect_clicked(clone!(
         #[strong]
@@ -85,33 +86,7 @@ fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
             super::upload_picker::pick_and_upload(&ui.window, ui.ctx.clone(), current_album(&ui));
         }
     ));
-
-    ui.back_button.connect_clicked(clone!(
-        #[strong]
-        ui,
-        move |_| {
-            navigate_back(ui.clone());
-        }
-    ));
-
-    // Alt+Left -> back. Attached to the window so it works regardless of focus.
-    let alt_left = gtk::Shortcut::builder()
-        .trigger(&gtk::ShortcutTrigger::parse_string("<Alt>Left").unwrap())
-        .action(&gtk::CallbackAction::new(clone!(
-            #[strong]
-            ui,
-            move |_, _| {
-                if navigate_back(ui.clone()) {
-                    glib::Propagation::Stop
-                } else {
-                    glib::Propagation::Proceed
-                }
-            }
-        )))
-        .build();
-    let alt_left_controller = gtk::ShortcutController::new();
-    alt_left_controller.add_shortcut(alt_left);
-    ui.window.add_controller(alt_left_controller);
+    connect_back_controls(ui);
 
     let f5_controller = gtk::EventControllerKey::new();
     f5_controller.connect_key_pressed(clone!(
@@ -129,6 +104,85 @@ fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
         }
     ));
     ui.window.add_controller(f5_controller);
+}
+
+type NavAction = fn(&Rc<LibraryWindowUi>) -> bool;
+
+fn connect_back_controls(ui: &Rc<LibraryWindowUi>) {
+    ui.back_button.connect_clicked(clone!(
+        #[strong]
+        ui,
+        move |_| {
+            navigation::go_back(&ui);
+        }
+    ));
+    add_mouse_button(ui, 8, navigation::go_back);
+    add_mouse_button(ui, 9, navigation::go_forward);
+    add_shortcut(ui, "<Alt>Left", navigation::go_back);
+    add_shortcut(ui, "<Alt>Right", navigation::go_forward);
+    connect_swipe_back(ui);
+}
+
+fn add_mouse_button(ui: &Rc<LibraryWindowUi>, button: u32, action: NavAction) {
+    let gesture = gtk::GestureClick::builder()
+        .button(button)
+        .propagation_phase(gtk::PropagationPhase::Capture)
+        .build();
+    gesture.connect_pressed(clone!(
+        #[strong]
+        ui,
+        move |gesture, _, _, _| {
+            if action(&ui) {
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+            }
+        }
+    ));
+    ui.window.add_controller(gesture);
+}
+
+fn add_shortcut(ui: &Rc<LibraryWindowUi>, trigger: &str, action: NavAction) {
+    let shortcut = gtk::Shortcut::builder()
+        .trigger(&gtk::ShortcutTrigger::parse_string(trigger).expect("valid shortcut"))
+        .action(&gtk::CallbackAction::new(clone!(
+            #[strong]
+            ui,
+            move |_, _| {
+                if action(&ui) {
+                    glib::Propagation::Stop
+                } else {
+                    glib::Propagation::Proceed
+                }
+            }
+        )))
+        .build();
+    let controller = gtk::ShortcutController::new();
+    controller.add_shortcut(shortcut);
+    ui.window.add_controller(controller);
+}
+
+fn connect_swipe_back(ui: &Rc<LibraryWindowUi>) {
+    let swipe = gtk::GestureSwipe::builder().touch_only(true).build();
+    let start_x = Rc::new(std::cell::Cell::new(0.0));
+    let start_for_begin = start_x.clone();
+    swipe.connect_begin(move |gesture, sequence| {
+        if let Some((x, _)) = gesture.point(sequence) {
+            start_for_begin.set(x);
+        }
+    });
+    swipe.connect_swipe(clone!(
+        #[strong]
+        ui,
+        move |_, vx, vy| {
+            if is_back_swipe(start_x.get(), vx, vy) {
+                navigation::go_back(&ui);
+            }
+        }
+    ));
+    ui.content_stack.add_controller(swipe);
+}
+
+fn is_back_swipe(start_x: f64, vx: f64, vy: f64) -> bool {
+    start_x > 32.0 && vx > 600.0 && vx > vy.abs() * 2.0
 }
 
 /// The sort dropdown changes options per view and sorts the visible content.
@@ -209,7 +263,7 @@ fn connect_source_controls(ui: &Rc<LibraryWindowUi>) {
                 current_album(&ui),
                 ui.timeline_toggle.is_active(),
             );
-            navigate_and_load(&ui, source);
+            navigation::navigate_source(&ui, source);
         }
     ));
 
@@ -233,7 +287,7 @@ fn connect_source_controls(ui: &Rc<LibraryWindowUi>) {
             } else {
                 LibrarySource::AllAssets
             };
-            navigate_and_load(&ui, next_source);
+            navigation::navigate_source(&ui, next_source);
         }
     ));
 }
@@ -265,17 +319,12 @@ fn source_for_selection(
     }
 }
 
-/// Navigate to `source` (recording history), load it, and refresh the back button.
-fn navigate_and_load(ui: &Rc<LibraryWindowUi>, source: LibrarySource) {
-    let request = ui.ctx.library_state.lock().navigate_to(source);
-    apply_timeline_ui_state(ui, &request.1);
-    load_source_page(ui.clone(), request, false);
-    update_back_button(ui);
-}
-
 pub(super) fn refresh_library_surfaces(ui: Rc<LibraryWindowUi>, include_current_source: bool) {
     load_albums(ui.clone());
     load_status(ui.clone());
+    if include_current_source {
+        super::features::load(&ui);
+    }
 
     // Clearing `populated` marks the cached explore/albums grids as stale
     // but, by itself, won't repaint a visible tab. Re-trigger the loader
@@ -289,13 +338,19 @@ pub(super) fn refresh_library_surfaces(ui: Rc<LibraryWindowUi>, include_current_
         _ => {}
     }
 
-    if include_current_source {
-        let request = {
-            let source = ui.ctx.library_state.lock().source.clone();
-            ui.ctx.library_state.lock().switch_source(source)
-        };
-        load_source_page(ui, request, false);
+    if !include_current_source {
+        return;
     }
+    if navigation::on_page(&ui) {
+        navigation::reload_current(&ui);
+        return;
+    }
+    let request = {
+        let source = ui.ctx.library_state.lock().source.clone();
+        ui.ctx.library_state.lock().switch_source(source)
+    };
+    super::source_header::show(&ui, &request.1);
+    load_source_page(ui, request, false);
 }
 
 pub(super) fn refresh_library_after_mutation(ui: Rc<LibraryWindowUi>, prefer_current_source: bool) {
@@ -303,42 +358,37 @@ pub(super) fn refresh_library_after_mutation(ui: Rc<LibraryWindowUi>, prefer_cur
 }
 
 pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
-    // Photos / Explore (fixed destinations).
-    ui.sidebar.fixed_list.connect_row_selected(clone!(
+    for list in &ui.sidebar.fixed_lists {
+        connect_fixed_list(&ui, list);
+    }
+
+    ui.sidebar.albums_list.connect_row_selected(clone!(
         #[strong]
         ui,
         move |_, row| {
-            let Some(row) = row else {
+            if ui.sidebar_suppressed.get() {
+                return;
+            }
+            let Some(tooltip) = row.and_then(|row| row.tooltip_text()) else {
                 return;
             };
-            let key = row.tooltip_text().unwrap_or_default();
-            ui.sidebar.albums_list.unselect_all();
-            let is_search = key.as_str() == "search";
-            // Show/hide the search form revealer.
-            ui.search_view.root.set_reveal_child(is_search);
-            match key.as_str() {
-                "photos" => sidebar_dispatch(ui.clone(), LibrarySource::Timeline),
-                "search" => {
-                    // Show the empty state so the grid area isn't blank.
-                    // Once the user submits a search, results replace this.
-                    ui.content_stack.set_visible_child_name("empty");
-                    // Focus the search entry for immediate typing.
-                    ui.search_view.search_entry.grab_focus();
-                    super::refresh_search_tags(ui.clone(), None);
-                }
-                "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
-                "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
-                "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
-                "albums" => show_albums_page(&ui, false),
-                "shared-albums" => show_albums_page(&ui, true),
-                "shared-links" => super::shared_links_view::show(&ui),
-                _ => {}
-            }
+            let (id, name) = tooltip
+                .split_once(':')
+                .unwrap_or((tooltip.as_str(), "Album"));
+            navigation::navigate_source(
+                &ui,
+                LibrarySource::Album {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                },
+            );
             auto_hide_sidebar(&ui);
         }
     ));
+}
 
-    ui.sidebar.albums_list.connect_row_selected(clone!(
+fn connect_fixed_list(ui: &Rc<LibraryWindowUi>, list: &gtk::ListBox) {
+    list.connect_row_selected(clone!(
         #[strong]
         ui,
         move |_, row| {
@@ -348,15 +398,13 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
             let Some(row) = row else {
                 return;
             };
-            let Some(tooltip) = row.tooltip_text() else {
-                return;
+            let location = match super::sidebar::recent_album_key(row) {
+                Some((id, name)) => Some(Location::Source(LibrarySource::Album { id, name })),
+                None => navigation::location_for_key(&row.tooltip_text().unwrap_or_default()),
             };
-            let mut parts = tooltip.splitn(2, ':');
-            let id = parts.next().unwrap_or_default().to_string();
-            let name = parts.next().unwrap_or("Album").to_string();
-            ui.sidebar.fixed_list.unselect_all();
-            ui.search_view.root.set_reveal_child(false);
-            sidebar_dispatch(ui.clone(), LibrarySource::Album { id, name });
+            if let Some(location) = location {
+                navigation::navigate(&ui, location);
+            }
             auto_hide_sidebar(&ui);
         }
     ));
@@ -366,55 +414,6 @@ fn auto_hide_sidebar(ui: &Rc<LibraryWindowUi>) {
     if ui.split.is_collapsed() {
         ui.split.set_show_sidebar(false);
     }
-}
-
-pub(super) fn update_back_button(ui: &Rc<LibraryWindowUi>) {
-    let can_go_back = ui.ctx.library_state.lock().can_go_back();
-    ui.back_button.set_sensitive(can_go_back);
-}
-
-/// Pop the navigation history and switch to the previous source. Returns
-/// true if a back-step was taken, false when the history was empty.
-pub(super) fn navigate_back(ui: Rc<LibraryWindowUi>) -> bool {
-    let request = ui.ctx.library_state.lock().navigate_back();
-    if let Some(request) = request {
-        apply_timeline_ui_state(&ui, &request.1);
-        load_source_page(ui.clone(), request, false);
-        update_back_button(&ui);
-        true
-    } else {
-        false
-    }
-}
-
-/// Common path for sidebar selections. Skips redundant dispatches so the
-/// `reload_sidebar` programmatic re-selection doesn't loop into another
-/// fetch -- but only when the content stack is already showing the current
-/// source, since the Albums grid moves the stack without changing source.
-/// Show the Albums page, or its Shared Albums variant.
-fn show_albums_page(ui: &Rc<LibraryWindowUi>, shared_only: bool) {
-    ui.album_link_row.set_visible(false);
-    if let Some(parent) = ui.album_link_row.parent() {
-        parent.set_visible(false);
-    }
-    super::albums_view::set_shared_only(&ui.albums, shared_only);
-    if ui.albums.populated.get() {
-        ui.content_stack.set_visible_child_name("albums");
-    } else {
-        ui.content_stack.set_visible_child_name("loading");
-        refresh_albums_view(ui.clone());
-    }
-}
-
-pub(super) fn sidebar_dispatch(ui: Rc<LibraryWindowUi>, source: LibrarySource) {
-    let on_albums_grid = ui.content_stack.visible_child_name().as_deref() == Some("albums");
-    if !on_albums_grid && ui.ctx.library_state.lock().source == source {
-        return;
-    }
-    let request = ui.ctx.library_state.lock().navigate_to(source);
-    apply_timeline_ui_state(&ui, &request.1);
-    load_source_page(ui.clone(), request, false);
-    update_back_button(&ui);
 }
 
 pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
@@ -484,6 +483,15 @@ mod tests {
 
     fn album() -> Option<(String, String)> {
         Some(("a1".to_string(), "Trips".to_string()))
+    }
+
+    #[test]
+    fn back_swipe_needs_a_fast_mostly_horizontal_swipe_away_from_the_edge() {
+        assert!(super::is_back_swipe(100.0, 900.0, 100.0));
+        assert!(!super::is_back_swipe(10.0, 900.0, 100.0));
+        assert!(!super::is_back_swipe(100.0, 300.0, 0.0));
+        assert!(!super::is_back_swipe(100.0, 900.0, 800.0));
+        assert!(!super::is_back_swipe(100.0, -900.0, 0.0));
     }
 
     #[test]

@@ -636,12 +636,20 @@ mod imp {
         }
 
         fn viewport(&self) -> (f32, f32) {
-            let adj = self.find_vadjustment();
-            if let Some(adj) = adj {
-                (adj.value() as f32, adj.page_size() as f32)
-            } else {
-                (0.0, self.obj().height() as f32)
-            }
+            let Some(adj) = self.find_vadjustment() else {
+                return (0.0, self.obj().height() as f32);
+            };
+            let scroll_y = self
+                .obj()
+                .parent()
+                .and_then(|parent| super::scrolled_child(&parent))
+                .and_then(|child| {
+                    self.obj()
+                        .compute_point(&child, &gtk::graphene::Point::new(0.0, 0.0))
+                })
+                .map(|origin| -origin.y())
+                .unwrap_or(adj.value() as f32);
+            (scroll_y, adj.page_size() as f32)
         }
 
         fn find_vadjustment(&self) -> Option<gtk::Adjustment> {
@@ -708,6 +716,17 @@ impl imp::SnapshotStats {
 }
 
 /// Get the current theme accent background colour from libadwaita.
+fn scrolled_child(widget: &gtk::Widget) -> Option<gtk::Widget> {
+    let mut node = Some(widget.clone());
+    while let Some(current) = node {
+        if let Some(scrolled) = current.downcast_ref::<gtk::ScrolledWindow>() {
+            return scrolled.child();
+        }
+        node = current.parent();
+    }
+    None
+}
+
 fn accent_bg_color() -> gdk4::RGBA {
     let accent = libadwaita::StyleManager::default().accent_color();
     accent.to_rgba()

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <path fill="currentColor" fill-rule="evenodd" d="M1.00 2.00 H15.00 V5.00 H1.00 Z M2.00 6.00 H14.00 V13.00 C14.00 13.55 13.55 14.00 13.00 14.00 H3.00 C2.45 14.00 2.00 13.55 2.00 13.00 Z M3.50 7.50 V12.50 H12.50 V7.50 Z M8.00 7.80 L10.60 10.40 H9.00 V12.00 H7.00 V10.40 H5.40 Z"/>
+</svg>

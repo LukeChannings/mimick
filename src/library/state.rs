@@ -59,6 +59,47 @@ pub enum LibrarySource {
     Trash,
     /// Assets marked as favorites.
     Favorites,
+    Archive,
+    Person {
+        id: String,
+        name: String,
+    },
+    Tag {
+        id: String,
+        name: String,
+    },
+    Folder {
+        path: String,
+    },
+    Place {
+        city: String,
+    },
+    Thing {
+        query: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibraryPage {
+    Albums { shared_only: bool },
+    SharedLinks,
+    People,
+    Tags { path: Option<String> },
+    Folders { path: Option<String> },
+    Sharing,
+    Search,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Location {
+    Source(LibrarySource),
+    Page(LibraryPage),
+}
+
+impl Location {
+    pub fn is_search(&self) -> bool {
+        matches!(self, Location::Source(source) if source.is_search())
+    }
 }
 
 impl LibrarySource {
@@ -117,7 +158,9 @@ pub struct LibraryState {
     /// Stack of past sources for back-navigation. Pushed by `navigate_to`,
     /// popped by `navigate_back`. Searches are not pushed (they are ephemeral).
     /// `VecDeque` for O(1) front pops when the 50-entry cap is hit.
-    pub nav_history: VecDeque<LibrarySource>,
+    pub nav_history: VecDeque<Location>,
+    pub forward_history: Vec<Location>,
+    pub location: Location,
     pub sort_mode: LibrarySortMode,
     pub load_state: LibraryLoadState,
     pub selected_asset_id: Option<String>,
@@ -136,6 +179,8 @@ impl Default for LibraryState {
             source: LibrarySource::AllAssets,
             previous_non_search_source: LibrarySource::AllAssets,
             nav_history: VecDeque::new(),
+            forward_history: Vec::new(),
+            location: Location::Source(LibrarySource::AllAssets),
             sort_mode: LibrarySortMode::NewestFirst,
             load_state: LibraryLoadState::Idle,
             selected_asset_id: None,
@@ -176,33 +221,6 @@ impl LibraryState {
         self.generation = self.generation.saturating_add(1);
         self.load_state = LibraryLoadState::Loading;
         (self.generation, source, 1)
-    }
-
-    /// Switch to `source`, recording the current source in nav_history first
-    /// so back-navigation can return to it. Searches are not pushed (they're
-    /// ephemeral). No-ops when navigating to the source we're already on.
-    pub fn navigate_to(&mut self, source: LibrarySource) -> (u64, LibrarySource, u32) {
-        if self.source != source
-            && !self.source.is_search()
-            && self.nav_history.back() != Some(&self.source)
-        {
-            self.nav_history.push_back(self.source.clone());
-            if self.nav_history.len() > 50 {
-                self.nav_history.pop_front();
-            }
-        }
-        self.switch_source(source)
-    }
-
-    /// Pop one entry from nav_history and switch to it. Does not push to
-    /// history. Returns None when there's nowhere to go back to.
-    pub fn navigate_back(&mut self) -> Option<(u64, LibrarySource, u32)> {
-        let prev = self.nav_history.pop_back()?;
-        Some(self.switch_source(prev))
-    }
-
-    pub fn can_go_back(&self) -> bool {
-        !self.nav_history.is_empty()
     }
 
     pub fn load_next_page_if_needed(&mut self) -> Option<(u64, LibrarySource, u32)> {
@@ -336,6 +354,7 @@ mod tests {
             checksum: None,
             exif_info: None,
             is_favorite: false,
+            visibility: String::new(),
         }
     }
 
@@ -430,60 +449,5 @@ mod tests {
         let (_, source, page) = state.clear_search_restore_previous_source().unwrap();
         assert!(matches!(source, LibrarySource::Album { .. }));
         assert_eq!(page, 1);
-    }
-
-    #[test]
-    fn test_trash_is_a_browsable_source_not_a_search() {
-        let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        let (_, source, page) = state.navigate_to(LibrarySource::Trash);
-        assert_eq!(source, LibrarySource::Trash);
-        assert_eq!(page, 1);
-        assert!(!source.is_search());
-
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
-    }
-
-    #[test]
-    fn test_navigate_back_pops_history() {
-        let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::Album {
-            id: "a1".into(),
-            name: "Trips".into(),
-        });
-        state.navigate_to(LibrarySource::Explore);
-
-        assert!(state.can_go_back());
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::Album { .. }));
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
-        assert!(!state.can_go_back());
-        assert!(state.navigate_back().is_none());
-    }
-
-    #[test]
-    fn test_navigate_skips_searches_in_history() {
-        let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::SmartSearch {
-            query: "sunset".into(),
-        });
-        // Going from a search to another non-search must NOT push the search.
-        state.navigate_to(LibrarySource::Explore);
-        // History should be [AllAssets], not [AllAssets, SmartSearch].
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
-        assert!(!state.can_go_back());
-    }
-
-    #[test]
-    fn test_navigate_to_same_source_is_noop_for_history() {
-        let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::AllAssets);
-        assert!(!state.can_go_back());
     }
 }

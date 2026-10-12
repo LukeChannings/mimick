@@ -78,6 +78,37 @@ impl ImmichApiClient {
             .ok_or_else(|| format!("Immich did not return the tag \"{value}\""))
     }
 
+    pub async fn rename_tag(&self, tag_id: &str, name: &str) -> Result<(), String> {
+        let tag = self
+            .update_tag(tag_id, serde_json::json!({ "name": name }))
+            .await?;
+        if tag.name != name {
+            return Err("Renaming tags needs a newer version of Immich.".to_string());
+        }
+        Ok(())
+    }
+
+    pub async fn set_tag_color(&self, tag_id: &str, color: &str) -> Result<(), String> {
+        self.update_tag(tag_id, serde_json::json!({ "color": color }))
+            .await
+            .map(|_| ())
+    }
+
+    async fn update_tag(&self, tag_id: &str, body: serde_json::Value) -> Result<Tag, String> {
+        let path = format!("/api/tags/{tag_id}");
+        let resp = self
+            .send_json(reqwest::Method::PUT, &path, Some(body))
+            .await?;
+        resp.json().await.map_err(|err| err.to_string())
+    }
+
+    pub async fn delete_tag(&self, tag_id: &str) -> Result<(), String> {
+        let path = format!("/api/tags/{tag_id}");
+        self.send_json(reqwest::Method::DELETE, &path, None)
+            .await
+            .map(|_| ())
+    }
+
     /// Apply a tag to an asset.
     pub async fn tag_asset(&self, tag_id: &str, asset_id: &str) -> Result<(), String> {
         self.change_tag_assets(reqwest::Method::PUT, tag_id, asset_id)

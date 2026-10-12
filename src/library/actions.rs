@@ -180,6 +180,20 @@ pub(super) fn connect_bulk_share_link(ui: Rc<LibraryWindowUi>, button: &gtk::But
     });
 }
 
+pub(super) fn connect_bulk_archive(ui: Rc<LibraryWindowUi>) {
+    ui.bulk_archive.clone().connect_clicked(move |_| {
+        let archived = !matches!(
+            ui.ctx.library_state.lock().source,
+            super::state::LibrarySource::Archive
+        );
+        let ui_done = ui.clone();
+        super::archive::set_archived(&ui, selected_items(&ui), archived, move |_| {
+            ui_done.grid.selection.unselect_all();
+            ui_done.select_toggle.set_active(false);
+        });
+    });
+}
+
 pub(super) fn selection_count(selection: &gtk::MultiSelection) -> u32 {
     let bitset = selection.selection();
     bitset.size() as u32
@@ -242,12 +256,22 @@ impl TrashTarget {
 }
 
 /// Heading and body for the trash confirmation dialog.
-fn trash_dialog_text(targets: &[TrashTarget], skipped_local: usize) -> (String, String) {
-    let heading = match targets {
-        [single] => format!("Move “{}” to trash?", single.filename),
-        _ => format!("Move {} items to trash?", targets.len()),
+fn trash_dialog_text(
+    targets: &[TrashTarget],
+    skipped_local: usize,
+    trash: bool,
+) -> (String, String) {
+    let heading = match (targets, trash) {
+        ([single], true) => format!("Move “{}” to trash?", single.filename),
+        (_, true) => format!("Move {} items to trash?", targets.len()),
+        ([single], false) => format!("Delete “{}” permanently?", single.filename),
+        (_, false) => format!("Delete {} items permanently?", targets.len()),
     };
-    let mut body = "Items can be restored from the Immich trash.".to_string();
+    let mut body = if trash {
+        "Items can be restored from the Immich trash.".to_string()
+    } else {
+        "The Immich trash is turned off, so this can't be undone.".to_string()
+    };
     if targets.iter().any(|t| t.has_local_copy) {
         body.push_str(" Local copies in your watch folders are kept.");
     }
@@ -270,13 +294,14 @@ pub(super) fn confirm_trash(
     if targets.is_empty() {
         return;
     }
-    let (heading, body) = trash_dialog_text(&targets, skipped_local);
+    let trash = ui.features.get().trash;
+    let (heading, body) = trash_dialog_text(&targets, skipped_local, trash);
     let dialog = libadwaita::AlertDialog::builder()
         .heading(heading)
         .body(body)
         .build();
     dialog.add_response("cancel", "Cancel");
-    dialog.add_response("delete", "Move to trash");
+    dialog.add_response("delete", if trash { "Move to trash" } else { "Delete" });
     dialog.set_response_appearance("delete", libadwaita::ResponseAppearance::Destructive);
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
@@ -358,6 +383,7 @@ mod tests {
             width: 0,
             height: 0,
             is_favorite: false,
+            is_archived: false,
         })
     }
 
@@ -401,7 +427,7 @@ mod tests {
 
     #[test]
     fn single_item_heading_names_the_file() {
-        let (heading, body) = trash_dialog_text(&[target("IMG_1.jpg", false)], 0);
+        let (heading, body) = trash_dialog_text(&[target("IMG_1.jpg", false)], 0, true);
         assert_eq!(heading, "Move “IMG_1.jpg” to trash?");
         assert_eq!(body, "Items can be restored from the Immich trash.");
     }
@@ -409,9 +435,16 @@ mod tests {
     #[test]
     fn body_mentions_kept_local_copies_and_skipped_items() {
         let targets = [target("a.jpg", true), target("b.jpg", false)];
-        let (heading, body) = trash_dialog_text(&targets, 2);
+        let (heading, body) = trash_dialog_text(&targets, 2, true);
         assert_eq!(heading, "Move 2 items to trash?");
         assert!(body.contains("Local copies in your watch folders are kept."));
         assert!(body.contains("2 local-only item(s)"));
+    }
+
+    #[test]
+    fn without_trash_the_dialog_warns_deletion_is_permanent() {
+        let (heading, body) = trash_dialog_text(&[target("IMG_1.jpg", false)], 0, false);
+        assert_eq!(heading, "Delete “IMG_1.jpg” permanently?");
+        assert!(body.contains("can't be undone"));
     }
 }

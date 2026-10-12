@@ -21,6 +21,8 @@ pub enum AlbumAction {
     Share,
     /// Create a public link to the album.
     CreateLink,
+    Rename,
+    EditDescription,
 }
 
 /// Runs a right-click action for one of the user's own albums.
@@ -349,6 +351,8 @@ fn attach_share_menu(tile: &gtk::Button, album: &LibraryAlbum, share: AlbumShare
         for (label, action) in [
             ("Share…", AlbumAction::Share),
             ("Create Share Link…", AlbumAction::CreateLink),
+            ("Rename…", AlbumAction::Rename),
+            ("Edit Description…", AlbumAction::EditDescription),
         ] {
             let button = gtk::Button::builder()
                 .label(label)
@@ -501,6 +505,8 @@ mod tests {
             thumbnail_asset_id: None,
             created_at: created.into(),
             updated_at: created.into(),
+            start_date: None,
+            end_date: None,
             description: String::new(),
             album_users: vec![AlbumUser {
                 user: AlbumUserInfo {

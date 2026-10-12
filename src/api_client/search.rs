@@ -13,6 +13,11 @@ use super::{
     SortOrder, VersionHistoryEntry,
 };
 
+#[derive(Debug, serde::Deserialize)]
+struct SearchStatistics {
+    total: u64,
+}
+
 impl ImmichApiClient {
     /// Fetch the list of recognized people faces from the server.
     pub async fn fetch_people(&self, include_hidden: bool) -> Result<Vec<Person>, String> {
@@ -275,6 +280,15 @@ impl ImmichApiClient {
         };
         self.search_metadata_with_filters(&filters, page, size)
             .await
+    }
+
+    pub async fn search_statistics(&self, filters: &MetadataSearchFilters) -> Result<u64, String> {
+        let body = serde_json::to_value(filters).map_err(|err| err.to_string())?;
+        let resp = self
+            .send_json(reqwest::Method::POST, "/api/search/statistics", Some(body))
+            .await?;
+        let stats: SearchStatistics = resp.json().await.map_err(|err| err.to_string())?;
+        Ok(stats.total)
     }
 
     /// Perform a advanced search matching specific metadata filters.

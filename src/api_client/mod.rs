@@ -14,7 +14,14 @@ use tokio::sync::{Mutex, Semaphore};
 
 mod albums;
 mod errors;
+mod features;
+pub use features::LibraryFeatures;
+mod folders;
 mod library;
+mod partners;
+pub use partners::PartnerDirection;
+mod people;
+pub use people::PersonUpdate;
 mod search;
 mod sharing;
 pub use sharing::AlbumRole;
@@ -85,6 +92,10 @@ pub struct LibraryAlbum {
     /// ISO 8601 modification timestamp.
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    #[serde(rename = "startDate", default)]
+    pub start_date: Option<String>,
+    #[serde(rename = "endDate", default)]
+    pub end_date: Option<String>,
     /// User description of the album.
     #[serde(default)]
     pub description: String,
@@ -178,6 +189,14 @@ pub struct LibraryAsset {
     /// Whether the asset is marked as a favorite.
     #[serde(rename = "isFavorite", default)]
     pub is_favorite: bool,
+    #[serde(default)]
+    pub visibility: String,
+}
+
+impl LibraryAsset {
+    pub fn is_archived(&self) -> bool {
+        self.visibility == "archive"
+    }
 }
 
 /// Immich returns asset checksums as base64-encoded SHA1, while Mimick computes
@@ -421,6 +440,10 @@ pub struct Person {
     pub name: String,
     #[serde(default, rename = "isHidden")]
     pub is_hidden: bool,
+    #[serde(default, rename = "birthDate")]
+    pub birth_date: Option<String>,
+    #[serde(default, rename = "isFavorite")]
+    pub is_favorite: bool,
 }
 
 /// List wrapper of recognized people returned by Immich.
@@ -567,6 +590,15 @@ pub struct Tag {
     /// Optional `#rrggbb` color set in Immich.
     #[serde(default)]
     pub color: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub album_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Editable asset fields for `PUT /api/assets/{id}`; `None` fields are left unchanged.

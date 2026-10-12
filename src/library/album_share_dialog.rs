@@ -231,7 +231,7 @@ fn capitalize(word: &str) -> String {
         .unwrap_or_default()
 }
 
-fn display_name(name: &str, email: &str) -> String {
+pub(super) fn display_name(name: &str, email: &str) -> String {
     if name.trim().is_empty() {
         email.to_string()
     } else {
@@ -240,7 +240,7 @@ fn display_name(name: &str, email: &str) -> String {
 }
 
 /// Users not yet in the album whose name or email contains `query` (case-insensitive).
-fn addable_users<'a>(
+pub(super) fn addable_users<'a>(
     users: &'a [UserSummary],
     member_ids: &[String],
     query: &str,

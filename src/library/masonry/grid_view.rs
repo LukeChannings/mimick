@@ -16,9 +16,24 @@ pub type AssetContextMenuHandler = Rc<RefCell<Option<Box<dyn Fn(u32, f64, f64)>>
 pub struct GridViewParts {
     pub model: LibraryAssetModel,
     pub scrolled: gtk::ScrolledWindow,
+    pub content: gtk::Box,
     pub canvas: MasonryCanvas,
     pub selection: gtk::MultiSelection,
     pub context_menu_handler: AssetContextMenuHandler,
+}
+
+fn scrolled_content(canvas: &MasonryCanvas) -> (gtk::ScrolledWindow, gtk::Box) {
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    content.append(canvas);
+    let scrolled = gtk::ScrolledWindow::builder()
+        .child(&content)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    (scrolled, content)
 }
 
 pub fn build_grid_view(
@@ -68,16 +83,12 @@ pub fn build_grid_view(
         });
     }
 
-    let scrolled = gtk::ScrolledWindow::builder()
-        .child(&canvas)
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vexpand(true)
-        .hexpand(true)
-        .build();
+    let (scrolled, content) = scrolled_content(&canvas);
 
     GridViewParts {
         model,
         scrolled,
+        content,
         canvas,
         selection,
         context_menu_handler,

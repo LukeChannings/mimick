@@ -22,8 +22,26 @@ const INITIAL_TILE_COUNT: usize = 16;
 const RECENTS_EXPANDED_COUNT: usize = 30;
 
 /// Contains references to individual grid widgets of the explore tab dashboard display.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExploreSections {
+    pub people: bool,
+    pub places: bool,
+    pub things: bool,
+}
+
+impl Default for ExploreSections {
+    fn default() -> Self {
+        Self {
+            people: true,
+            places: true,
+            things: true,
+        }
+    }
+}
+
 pub struct ExploreViewParts {
     pub root: gtk::ScrolledWindow,
+    pub sections: Rc<Cell<ExploreSections>>,
     pub populated: Rc<Cell<bool>>,
     people_row: gtk::Box,
     recents_grid: gtk::FlowBox,
@@ -105,6 +123,7 @@ pub fn build_explore_view() -> ExploreViewParts {
         search_query: Rc::new(RefCell::new(String::new())),
         filter_entry,
         cached_ctx: Rc::new(RefCell::new(None)),
+        sections: Rc::default(),
     }
 }
 
@@ -112,12 +131,17 @@ pub fn build_explore_view() -> ExploreViewParts {
 /// visual feedback that data is on the way. Each `populate_*` call clears
 /// its own spinner when results arrive.
 pub fn show_loading(parts: &ExploreViewParts) {
-    for (section, spinner) in [
-        (&parts.people_section, &parts.people_spinner),
-        (&parts.recents_section, &parts.recents_spinner),
-        (&parts.places_section, &parts.places_spinner),
-        (&parts.things_section, &parts.things_spinner),
+    let enabled = parts.sections.get();
+    for (section, spinner, shown) in [
+        (&parts.people_section, &parts.people_spinner, enabled.people),
+        (&parts.recents_section, &parts.recents_spinner, true),
+        (&parts.places_section, &parts.places_spinner, enabled.places),
+        (&parts.things_section, &parts.things_spinner, enabled.things),
     ] {
+        if !shown {
+            section.set_visible(false);
+            continue;
+        }
         section.set_visible(true);
         spinner.set_visible(true);
         spinner.start();
@@ -261,7 +285,9 @@ fn render_places_filtered(parts: &ExploreViewParts, ctx: Arc<AppContext>) {
             .filter(|p| p.city.to_ascii_lowercase().contains(&query))
             .collect()
     };
-    parts.places_section.set_visible(!filtered.is_empty());
+    parts
+        .places_section
+        .set_visible(parts.sections.get().places && !filtered.is_empty());
     let on_click = match parts.cached_places_click.borrow().clone() {
         Some(cb) => cb,
         None => return,
@@ -294,7 +320,9 @@ fn render_people(parts: &ExploreViewParts, ctx: Arc<AppContext>) {
         .filter(|p| show_unnamed || !p.name.is_empty())
         .filter(|p| query.is_empty() || p.name.to_ascii_lowercase().contains(&query))
         .collect();
-    parts.people_section.set_visible(!filtered.is_empty());
+    parts
+        .people_section
+        .set_visible(parts.sections.get().people && !filtered.is_empty());
     let on_click = parts.cached_people_click.borrow().clone();
     let Some(on_click) = on_click else {
         return;
@@ -411,6 +439,7 @@ fn clone_parts_handles(parts: &ExploreViewParts) -> ExploreViewParts {
         search_query: parts.search_query.clone(),
         filter_entry: parts.filter_entry.clone(),
         cached_ctx: parts.cached_ctx.clone(),
+        sections: parts.sections.clone(),
     }
 }
 
@@ -448,7 +477,9 @@ fn render_places(parts: &ExploreViewParts, ctx: Arc<AppContext>, expanded: bool)
         parts.places_grid.remove(&child);
     }
     let places = parts.cached_places.borrow();
-    parts.places_section.set_visible(!places.is_empty());
+    parts
+        .places_section
+        .set_visible(parts.sections.get().places && !places.is_empty());
     let on_click = match parts.cached_places_click.borrow().clone() {
         Some(cb) => cb,
         None => return,
@@ -563,7 +594,9 @@ pub fn populate_explore<F>(
         }
     }
 
-    parts.things_section.set_visible(had_things);
+    parts
+        .things_section
+        .set_visible(parts.sections.get().things && had_things);
     parts.recents_section.set_visible(had_recents);
 }
 
@@ -784,7 +817,9 @@ fn person_tile(
     };
     button.connect_clicked(move |_| on_click(id.clone(), name.clone()));
 
-    spawn_person_thumbnail(ctx, person.id.clone(), avatar);
+    spawn_person_thumbnail(ctx, person.id.clone(), move |texture| {
+        avatar.set_paintable(Some(texture))
+    });
     button
 }
 
@@ -864,7 +899,11 @@ fn spawn_asset_thumbnail(ctx: Arc<AppContext>, asset_id: String, picture: gtk::P
 }
 
 /// Helper to asynchronously request and render a round avatar person face thumbnail.
-fn spawn_person_thumbnail(ctx: Arc<AppContext>, person_id: String, picture: gtk::Picture) {
+pub(super) fn spawn_person_thumbnail(
+    ctx: Arc<AppContext>,
+    person_id: String,
+    on_loaded: impl FnOnce(&Texture) + 'static,
+) {
     glib::timeout_add_local_once(std::time::Duration::from_millis(120), move || {
         glib::MainContext::default().spawn_local(async move {
             let bytes = match ctx.api_client.fetch_person_thumbnail(&person_id).await {
@@ -878,7 +917,7 @@ fn spawn_person_thumbnail(ctx: Arc<AppContext>, person_id: String, picture: gtk:
             .ok()
             .flatten();
             if let Some(texture) = texture {
-                picture.set_paintable(Some(&texture));
+                on_loaded(&texture);
             }
         });
     });

@@ -105,7 +105,13 @@ impl TagSection {
         self.chips.remove_all();
         let tags = self.tags.borrow();
         for tag in tags.iter() {
-            self.chips.insert(&self.chip(tag), -1);
+            let slot = gtk::FlowBoxChild::builder()
+                .child(&self.chip(tag))
+                .halign(gtk::Align::Start)
+                .focusable(false)
+                .css_classes(["mimick-tag-slot"])
+                .build();
+            self.chips.insert(&slot, -1);
         }
         self.chips.set_visible(!tags.is_empty());
         self.empty_label.set_visible(tags.is_empty());
@@ -117,7 +123,7 @@ impl TagSection {
             .orientation(gtk::Orientation::Horizontal)
             .spacing(6)
             .build();
-        content.append(&color_dot(tag.color.as_deref()));
+        content.append(&color_dot(tag.color.as_deref(), 10));
         content.append(
             &gtk::Label::builder()
                 .use_markup(true)
@@ -352,12 +358,12 @@ fn tag_color(color: Option<&str>) -> Option<gdk4::RGBA> {
 }
 
 /// Small filled circle in the tag's color.
-fn color_dot(color: Option<&str>) -> gtk::DrawingArea {
+pub(super) fn color_dot(color: Option<&str>, size: i32) -> gtk::DrawingArea {
     let rgba = tag_color(color)
         .unwrap_or_else(|| libadwaita::StyleManager::default().accent_color().to_rgba());
     let dot = gtk::DrawingArea::builder()
-        .content_width(10)
-        .content_height(10)
+        .content_width(size)
+        .content_height(size)
         .valign(gtk::Align::Center)
         .build();
     dot.set_draw_func(move |_, cr, width, height| {

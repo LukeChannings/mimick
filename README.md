@@ -113,6 +113,15 @@ Each watched directory operates with isolated logical constraints:
 - **Shared Albums:** A **Shared Albums** sidebar entry lists albums shared with you and by you; right-click one of your albums to share it with other users, change their role (Viewer/Editor), or remove them.
 - **Shared Links:** Create a public link for an album (right-click its tile), a selection (share button in the selection bar), or a single asset (right-click menu), with optional expiry, password, and download/upload/metadata options. The **Shared Links** sidebar entry lists every link to copy, edit, or delete.
 - **Server About:** Click the server row in the library sidebar for the Immich version, component versions (ExifTool, Node.js, FFmpeg, …), source/build links, and the server's version history.
+- **People:** Browse everyone Immich has recognized, open their photos, favorite people, and rename, hide, set a birthday, or merge people.
+- **Album Editing:** Rename albums and edit their descriptions; linked watch folders stay linked.
+- **Follows Your Immich Settings:** Pages and search options for features that are turned off on the server or in your account (for example People, Tags, smart search, or the trash) are hidden.
+- **Mobile Navigation:** A bottom bar for Photos, Explore, Albums, and People on narrow windows, plus Forward (**Alt+Right**) and swipe-to-go-back.
+- **Tags page:** Browse the tag tree from the sidebar, open a tag's photos, and create, rename, recolor, or delete tags.
+- **Folders:** Browse server photos by the folder they were uploaded from.
+- **Partner Sharing:** Share your whole library with another user, or stop sharing, from the **Sharing** sidebar page.
+- **View Headers:** Every photo view opens with a title header showing counts, dates, sharing, ages, and the view's actions, and **Back** returns to wherever you were, pages included.
+- **Archive:** Archive photos to hide them from the Photos timeline (right-click, lightbox button or **A**, or the selection bar); the **Archive** sidebar entry lists them.
 - **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
 - **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).
 
@@ -193,6 +202,14 @@ When generating the API key in Immich (Account Settings → API Keys), grant onl
 | Edit info / move to trash from the library                          | `asset.update`, `asset.delete`                                                                                                                                 |
 | Trash view (restore, delete permanently, empty trash)               | `asset.read`, `asset.delete`                                                                                                                                   |
 | Tags in the details pane and tag search                             | `tag.read`; adding/removing tags also needs `tag.asset`, and creating new tags `tag.create`                                                                   |
+| Archive (archive / unarchive from the library)                      | `asset.update`                                                                                                                                                |
+| People page (rename, favorite, hide, birthday, merge)               | `person.read`, `person.update`, `person.merge`; photo counts in a person's header need `person.statistics`                                                    |
+| Tags page (create, rename, recolor, delete tags)                    | `tag.read`, `tag.create`, `tag.update`, `tag.delete`                                                                                                          |
+| Folders view                                                        | `folder.read`                                                                                                                                                 |
+| Partner sharing (add or remove partners)                            | `partner.read`, `partner.create`, `partner.delete`, `user.read`                                                                                               |
+| Rename albums and edit descriptions                                 | `album.update`                                                                                                                                                |
+| Counts and details in view headers                                  | `asset.statistics`, `album.read`, `person.statistics`                                                                                                         |
+| Hide pages for features turned off in your account                  | `userPreference.read` (without it, every page stays visible)                                                                                                  |
 | **Sync Method** set to **Full** or **Download Only** (folder rules) | `asset.read`, `asset.download`                                                                                                                                 |
 | **Mirror Folder Deletions to Album** (folder rules toggle)          | `asset.delete` _and_ `albumAsset.delete` (the latter is used when the same asset is referenced by another watch folder, so we just unlink instead of trashing) |
 | **Mirror Album Deletions to Folder** (folder rules toggle)          | No additional remote permissions — the album listing is already covered by `album.read`, the trash happens locally                                             |
