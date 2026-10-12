@@ -36,8 +36,19 @@ If you plan to build or test the Flatpak bundle locally using `flatpak-builder`,
 
 ```bash
 cargo check
-cargo run
-cargo run -- --settings
+cargo run                   # start in background mode
+cargo run -- --settings     # open the settings window immediately
+cargo build --release       # build optimized release binary
+```
+
+### Desktop Launcher Integration (Native)
+
+To integrate a native build with your desktop application launcher:
+
+```bash
+cp setup/dev.nicx.mimick.desktop ~/.local/share/applications/
+cp setup/icons/dev.nicx.mimick.svg ~/.local/share/icons/hicolor/scalable/apps/
+update-desktop-database ~/.local/share/applications/
 ```
 
 ## API Documentation (Rustdoc)

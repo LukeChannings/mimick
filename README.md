@@ -36,7 +36,6 @@ Mimick is an unofficial Immich desktop client for Linux. It provides a GTK4/liba
 - [![Installation](https://img.shields.io/badge/Installation-2E8B57?style=flat-square)](#installation-recommended)
 - [![Usage & Configuration](https://img.shields.io/badge/Usage_&_Configuration-8A2BE2?style=flat-square)](#usage--configuration)
 - [![Building from Source](https://img.shields.io/badge/Building_from_Source-B8860B?style=flat-square)](#building-from-source-for-developers)
-- [![Logging & Notifications](https://img.shields.io/badge/Logging_&_Notifications-CB4B16?style=flat-square)](#logging--notifications)
 - [![Documentation](https://img.shields.io/badge/Documentation-444444?style=flat-square)](#documentation)
 - [![Trust & Verification](https://img.shields.io/badge/Trust_&_Verification-0E7490?style=flat-square)](#trust-and-verification)
 - [![License](https://img.shields.io/badge/License-green?style=flat-square)](#license)
@@ -104,26 +103,16 @@ Each watched directory operates with isolated logical constraints:
 
 ### Library View (Optional)
 
-- **Album Browser:** Built-in album browser with thumbnail grid and Explore landing page.
-- **Advanced Search:** Search modes: filename/metadata, Smart (CLIP), and OCR text lookup.
-- **Media Lightbox:** Download originals and open full-resolution previews in the lightbox.
-- **Manage Assets:** Edit an asset's description, date taken, and favorite flag, or move it to the Immich trash (right-click, lightbox button, or **Delete**).
-- **Tags:** View, add, create, and remove tags in the lightbox details pane; click a tag or use the Tag search filter to find tagged assets.
-- **Favorites:** A heart in the lightbox (or **F**, the right-click menu, or Edit Info) marks favorites instantly; favorited thumbnails show a small heart, and the **Favorites** sidebar entry lists them.
-- **Shared Albums:** A **Shared Albums** sidebar entry lists albums shared with you and by you; right-click one of your albums to share it with other users, change their role (Viewer/Editor), or remove them.
-- **Shared Links:** Create a public link for an album (right-click its tile), a selection (share button in the selection bar), or a single asset (right-click menu), with optional expiry, password, and download/upload/metadata options. The **Shared Links** sidebar entry lists every link to copy, edit, or delete.
-- **Server About:** Click the server row in the library sidebar for the Immich version, component versions (ExifTool, Node.js, FFmpeg, …), source/build links, and the server's version history.
-- **People:** Browse everyone Immich has recognized, open their photos, favorite people, and rename, hide, set a birthday, or merge people.
-- **Album Editing:** Rename albums and edit their descriptions; linked watch folders stay linked.
-- **Follows Your Immich Settings:** Pages and search options for features that are turned off on the server or in your account (for example People, Tags, smart search, or the trash) are hidden.
-- **Mobile Navigation:** A bottom bar for Photos, Explore, Albums, and People on narrow windows, plus Forward (**Alt+Right**) and swipe-to-go-back.
-- **Tags page:** Browse the tag tree from the sidebar, open a tag's photos, and create, rename, recolor, or delete tags.
-- **Folders:** Browse server photos by the folder they were uploaded from.
-- **Partner Sharing:** Share your whole library with another user, or stop sharing, from the **Sharing** sidebar page.
-- **View Headers:** Every photo view opens with a title header showing counts, dates, sharing, ages, and the view's actions, and **Back** returns to wherever you were, pages included.
-- **Archive:** Archive photos to hide them from the Photos timeline (right-click, lightbox button or **A**, or the selection bar); the **Archive** sidebar entry lists them.
-- **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
-- **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).
+An optional desktop library interface for browsing and managing your Immich photos directly on Linux (toggle via **Settings → Behavior → Enable Library View**):
+
+- **Browsing & Lightbox:** Timeline and album grid, full-resolution previews, media metadata viewer, asset download, and an Explore landing page (people, places, things).
+- **Search & Discovery:** Metadata search, smart CLIP semantic search, OCR text lookup, and server-folder browsing.
+- **Asset Management:** Edit dates and descriptions, toggle favorites, archive assets to hide them from the main timeline, or manage the Immich trash.
+- **People & Tags:** Face recognition browser with favorite people, birthdays, and person merging; hierarchical tag tree with color tagging and creation.
+- **Sharing & Collaboration:** Partner library sharing, shared albums with role management (Viewer/Editor), and password-protected public shared links.
+- **Adaptive Layout:** Responsive design with a mobile bottom navigation bar on narrow screens (< 600 px), view headers with navigation history (Back/Forward, touch swipe), and automatic hiding of features disabled on the server.
+
+> See the [Library View User Guide](https://github.com/nicx17/mimick/wiki/Library-View-User-Guide) for complete documentation and keyboard shortcuts.
 
 ---
 
@@ -147,7 +136,7 @@ You can install Mimick directly from Flathub:
 flatpak install flathub dev.nicx.mimick
 ```
 
-## _(Note: If you haven't setup Flathub yet, follow the setup guide for your distribution at [flathub.org/setup](https://flathub.org/setup).)_
+> **Note:** If you haven't set up Flathub yet, follow the setup guide for your distribution at [flathub.org/setup](https://flathub.org/setup).
 
 ## Usage & Configuration
 
@@ -178,9 +167,9 @@ The bottom footer keeps **Close**, **Quit**, and **Save Changes** visible even w
 
 ### Required API Key permissions
 
-When generating the API key in Immich (Account Settings → API Keys), grant only what you need:
+When generating the API key in Immich (**Account Settings → API Keys**), grant only what you need:
 
-**Base — required for any sync to work:**
+**Base — required for core sync to work:**
 
 | Permission       | Why                                              |
 | ---------------- | ------------------------------------------------ |
@@ -188,33 +177,9 @@ When generating the API key in Immich (Account Settings → API Keys), grant onl
 | `asset.upload`   | Send media to the server                         |
 | `asset.update`   | Apply correct timezone metadata after upload     |
 
-**Optional — only required for the features you enable:**
+Granting `all` enables every feature automatically. For least-privilege configurations, optional features (albums, library browsing, trash, tags, people, folders, sharing) require specific scopes.
 
-| Feature                                                             | Additional permissions                                                                                                                                         |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Album-targeted watch folders                                        | `album.read`, `album.create`, `albumAsset.create`                                                                                                             |
-| Server Stats Dialog (click server name in Settings)                 | `server.about`, `server.versionCheck`, `server.statistics`, `asset.statistics`                                                                 |
-| Library Footer Statistics (photo/video counts)                      | `asset.statistics`                                                                                                                                             |
-| Server About dialog (click the server row in the library sidebar)   | `server.about`, `server.versionCheck`                                                                                                                          |
-| Shared Albums (share your albums, change roles, remove people)      | `album.read`, `albumUser.create`, `albumUser.update`, `albumUser.delete`, `user.read`                                                                          |
-| Shared Links (create, copy, edit, delete public links)              | `sharedLink.read`, `sharedLink.create`, `sharedLink.update`, `sharedLink.delete`                                                                               |
-| Library / Explore view (browse photos inside Mimick)                | `asset.read`, `asset.view`, `asset.download`, `person.read`                                                                                                    |
-| Edit info / move to trash from the library                          | `asset.update`, `asset.delete`                                                                                                                                 |
-| Trash view (restore, delete permanently, empty trash)               | `asset.read`, `asset.delete`                                                                                                                                   |
-| Tags in the details pane and tag search                             | `tag.read`; adding/removing tags also needs `tag.asset`, and creating new tags `tag.create`                                                                   |
-| Archive (archive / unarchive from the library)                      | `asset.update`                                                                                                                                                |
-| People page (rename, favorite, hide, birthday, merge)               | `person.read`, `person.update`, `person.merge`; photo counts in a person's header need `person.statistics`                                                    |
-| Tags page (create, rename, recolor, delete tags)                    | `tag.read`, `tag.create`, `tag.update`, `tag.delete`                                                                                                          |
-| Folders view                                                        | `folder.read`                                                                                                                                                 |
-| Partner sharing (add or remove partners)                            | `partner.read`, `partner.create`, `partner.delete`, `user.read`                                                                                               |
-| Rename albums and edit descriptions                                 | `album.update`                                                                                                                                                |
-| Counts and details in view headers                                  | `asset.statistics`, `album.read`, `person.statistics`                                                                                                         |
-| Hide pages for features turned off in your account                  | `userPreference.read` (without it, every page stays visible)                                                                                                  |
-| **Sync Method** set to **Full** or **Download Only** (folder rules) | `asset.read`, `asset.download`                                                                                                                                 |
-| **Mirror Folder Deletions to Album** (folder rules toggle)          | `asset.delete` _and_ `albumAsset.delete` (the latter is used when the same asset is referenced by another watch folder, so we just unlink instead of trashing) |
-| **Mirror Album Deletions to Folder** (folder rules toggle)          | No additional remote permissions — the album listing is already covered by `album.read`, the trash happens locally                                             |
-
-If you grant `all`, every feature works without further configuration. The granular list above is for users who prefer least-privilege keys.
+> See the full [API Key Security & Required Permissions Guide](https://github.com/nicx17/mimick/wiki/Configuration-and-First-Run#api-key-security--required-permissions) in the wiki for the complete per-feature permissions mapping.
 
 ### Autostart
 
@@ -275,71 +240,35 @@ These options defer uploads rather than changing your watch configuration, so sy
 
 ## Building from Source (For Developers)
 
-If you prefer to compile Mimick yourself, you can build it natively or package it as a local Flatpak.
+If you prefer to compile Mimick yourself, you can build it natively with Cargo or package it as a local Flatpak.
 
-### Prerequisites (Native Build)
+### Prerequisites
 
 - Rust toolchain (`cargo`): <https://rustup.rs>
-- GTK4 + Libadwaita development headers
+- GTK4 (>= 4.12) and Libadwaita (>= 1.6) development libraries
 
-**Ubuntu / Debian:**
+Detailed package installation commands for Ubuntu/Debian, Fedora, Arch Linux, and local Flatpak SDK dependencies are documented in the [Development Wiki Guide](https://github.com/nicx17/mimick/wiki/Development).
 
-```bash
-sudo apt install libgtk-4-dev libadwaita-1-dev libglib2.0-dev pkg-config build-essential
-
-```
-
-**Fedora:**
-
-```bash
-sudo dnf install gtk4-devel libadwaita-devel pkg-config
-
-```
-
-**Arch Linux:**
-
-```bash
-sudo pacman -S gtk4 libadwaita pkgconf base-devel
-
-```
-
-### Native Rust Build
+### Native Build
 
 ```bash
 git clone https://github.com/nicx17/mimick.git
 cd mimick
 cargo build --release
-# Copy the desktop file and icons from setup/ to ~/.local/share/applications and ~/.local/share/icons for launcher integration
 
 # Run Directly
 cargo run                   # start in background mode
 cargo run -- --settings     # open the settings window immediately
-
 ```
-
-Logs written to the terminal and to `~/.cache/mimick/mimick.log` include timestamps.
-Terminal logs are colorized by level, and file logs rotate automatically.
-
-## Logging & Notifications
-
-- **Logging**: Mimick now uses a colored console formatter for human-friendly terminal output and a plain file formatter for persistent logs. File logs are rotated automatically (approx. 2 MB per file; 5 files kept). Control verbosity with `RUST_LOG` (for example: `RUST_LOG=debug`). See [the Development wiki page](https://github.com/nicx17/mimick/wiki/Development) for details on the logger configuration.
-
-- **Notifications**: To reduce notification spam, Mimick aggregates multiple worker uploads into a single batch summary notification when a sync cycle completes. A separate "Connection Lost" notification is still emitted for connectivity failure events.
-
-### Settings behavior
-
-- Most settings (worker count, quiet hours, folder rules, per-folder album, watch-folder additions/removals) are applied live when changed in the Settings window.
-- Connectivity edits (API key and server URLs) are intentionally save-only and require clicking **Save** within the Connectivity group to take effect. This reduces accidental partial-configuration of server credentials during exploratory edits.
 
 ### Local Flatpak Build
 
 ```bash
-git clone https://github.com/nicx17/mimick.git
-cd mimick
 flatpak-builder --user --install --force-clean build-dir dev.nicx.mimick.local.yml
 flatpak run dev.nicx.mimick
-
 ```
+
+For runtime profile switching (`MIMICK_PROFILE`), logger verbosity flags (`RUST_LOG`), and test workflows, see the [Development Guide](https://github.com/nicx17/mimick/wiki/Development) and [Testing Guide](https://github.com/nicx17/mimick/wiki/Testing).
 
 ---
 
