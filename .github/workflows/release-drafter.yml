@@ -3,8 +3,6 @@ name: Release Drafter
 on:
   push:
     branches: ["main"]
-  pull_request_target:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
   workflow_dispatch:
 
 permissions: read-all
@@ -15,12 +13,12 @@ env:
 
 jobs:
   update-release-draft:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
       pull-requests: read
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
 
     steps:

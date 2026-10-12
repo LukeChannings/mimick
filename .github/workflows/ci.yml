@@ -27,7 +27,7 @@ env:
 jobs:
   checks:
     name: Format, Lint, and Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
 
@@ -61,7 +61,7 @@ jobs:
 
   cargo-audit:
     name: Dependency Audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout code

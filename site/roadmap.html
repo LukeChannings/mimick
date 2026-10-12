@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimick Roadmap - What's Shipped and What's Next</title>
+    <meta
+      name="description"
+      content="The Mimick roadmap: features already shipped in each release, and what is planned next for the Immich desktop client for Linux.">
+    <link rel="canonical" href="https://mimick.nicx.dev/roadmap.html">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Mimick">
+    <meta property="og:title" content="Mimick Roadmap">
+    <meta
+      property="og:description"
+      content="Features shipped in each Mimick release, and what is planned next.">
+    <meta property="og:url" content="https://mimick.nicx.dev/roadmap.html">
+    <meta property="og:image" content="https://mimick.nicx.dev/icon.png">
+    <meta name="twitter:card" content="summary">
+    <link rel="preload" href="fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="fonts/newsreader-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <meta name="theme-color" content="#000000">
+    <link rel="icon" href="icon.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="stylesheet" href="styles.css">
+    <script>document.documentElement.classList.add("js");</script>
+  </head>
+  <body class="roadmap-page">
+    <main>
+      <div class="container">
+        <div class="top-controls page-nav">
+          <a class="back-link" href="./">&larr; Mimick</a>
+          <button
+            id="theme-toggle"
+            class="theme-toggle"
+            type="button"
+            aria-pressed="false"
+          >
+            Light Mode
+          </button>
+        </div>
+
+        <header>
+          <p class="eyebrow">Roadmap</p>
+          <h1>What's next</h1>
+          <p class="subtitle">
+            What's planned for Mimick, taken live from open GitHub issues,
+            and everything that has shipped so far.
+          </p>
+        </header>
+
+        <section class="stats-row" aria-label="Roadmap at a glance">
+          <div class="stat reveal">
+            <span class="stat-value" id="stat-open">&mdash;</span>
+            <span class="stat-label">Open on GitHub</span>
+          </div>
+          <div class="stat reveal">
+            <span class="stat-value" id="stat-shipped">&mdash;</span>
+            <span class="stat-label">Highlights shipped</span>
+          </div>
+          <div class="stat reveal">
+            <span class="stat-value">9.10.0</span>
+            <span class="stat-label">Latest release</span>
+          </div>
+        </section>
+
+        <nav class="section-tabs" aria-label="Roadmap sections">
+          <a href="#up-next">Up next</a>
+          <a href="#shipped">Shipped</a>
+        </nav>
+
+        <section id="up-next" class="roadmap-section" aria-labelledby="up-next-title">
+          <h2 id="up-next-title">Up next</h2>
+          <p class="section-note">
+            Pulled live from
+            <a href="https://github.com/nicx17/mimick/issues" target="_blank" rel="noopener">open issues</a>.
+            React with 👍 on an issue to vote for it.
+          </p>
+
+          <h3 class="group-title">Planned features</h3>
+          <div class="issue-grid" id="issues-planned" aria-live="polite">
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+          </div>
+
+          <h3 class="group-title">Other open issues</h3>
+          <div class="issue-grid" id="issues-other" aria-live="polite">
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+            <div class="issue-card issue-skeleton" aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <section id="shipped" class="roadmap-section" aria-labelledby="shipped-title">
+          <h2 id="shipped-title">Shipped</h2>
+          <p class="section-note">
+            Highlights from each release. The full list is in the
+            <a href="https://github.com/nicx17/mimick/blob/main/CHANGELOG.md" target="_blank" rel="noopener">changelog</a>.
+          </p>
+
+          <ol class="timeline">
+            <li class="release release-next reveal">
+              <div class="release-head">
+                <span class="release-version">Next release</span>
+                <span class="release-date">In development</span>
+              </div>
+              <ul class="release-items">
+                <li>Favorites: a heart button in the lightbox (or <kbd>F</kbd>), heart badges on thumbnails, and a Favorites sidebar entry</li>
+                <li>Tags: add, create, and remove tags in the details pane, and search by tag <a href="https://github.com/nicx17/mimick/issues/141">#141</a></li>
+                <li>Trash view to restore, permanently delete, or empty trashed items <a href="https://github.com/nicx17/mimick/issues/229">#229</a></li>
+                <li>Move to trash, and edit an asset's description, date taken, and favorite status <a href="https://github.com/nicx17/mimick/issues/183">#183</a></li>
+                <li>Shared Albums, plus a Share dialog with Viewer and Editor roles</li>
+                <li>Public shared links with an expiry, a password, and download options</li>
+                <li>Server About dialog showing Immich and component versions</li>
+                <li>Watch folders can upload straight to the library without an album <a href="https://github.com/nicx17/mimick/issues/210">#210</a></li>
+                <li>API key file fallback when no keyring is running, and a keyring timeout so startup can't hang <a href="https://github.com/nicx17/mimick/issues/215">#215</a></li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.10.0</span>
+                <span class="release-date">October 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Works at a 360px minimum window width, with a compact masonry tier</li>
+                <li>Places filter on the Explore page</li>
+                <li>Configurable masonry grid border width and color</li>
+                <li>Search view stays in the sidebar</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.9.0</span>
+                <span class="release-date">August 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Drag files onto the window or onto an album row to upload them</li>
+                <li>Drag assets out of the grid or lightbox to export the originals</li>
+                <li>Recently Added on Explore, with expandable sections and cached Places</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.8.0</span>
+                <span class="release-date">July 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>"Open With Mimick" from your file manager opens a staging window for upload</li>
+                <li>Video thumbnails in the staging grid</li>
+                <li>Selection checkboxes on grid tiles</li>
+                <li>Immich v3 API support</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.7.0</span>
+                <span class="release-date">June 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Masonry Photos layout that keeps natural aspect ratios</li>
+                <li>Thumbnail quality setting: Auto, Thumbnail, Preview, or Full Size</li>
+                <li>Shift+Click range selection</li>
+                <li>Download folder prompt, batch download summary, and one conflict dialog for the whole batch</li>
+                <li>Clear dialogs for missing API key permissions</li>
+                <li>Thumbnail memory cache sized from available RAM</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.6</span>
+                <span class="release-date">May 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Server statistics dialog</li>
+                <li>Face visibility filters in Explore</li>
+                <li>RAW support: fast embedded previews, optional full libraw decoding, and a decode cache</li>
+                <li>Lightbox decoding for JPEG XL, JPEG 2000, PSD, SVG, and more WebP and JPEG files</li>
+                <li>XMP sidecar uploads</li>
+                <li>Swipe and pinch gestures in the lightbox</li>
+                <li>Press animations, and an overhaul for 360px mobile screens</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.5.4</span>
+                <span class="release-date">May 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Per-folder sync modes: Upload only, Download only, or Full sync <a href="https://github.com/nicx17/mimick/issues/120">#120</a></li>
+                <li>Optional two-way deletion sync, and a periodic check for remote album changes</li>
+                <li>Checksum dedup before upload, and rename detection</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.5.3</span>
+                <span class="release-date">May 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Back navigation across library views</li>
+                <li>Lightbox zoom with Ctrl+scroll, pinch, and on-screen controls</li>
+                <li>Slide animation between lightbox images</li>
+                <li>Uploads in progress finish or are saved for retry when you quit</li>
+                <li>Faster parallel startup scan and a sharded sync index</li>
+                <li>Places shows every city with geotagged photos</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.5.2</span>
+                <span class="release-date">May 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Right-click context menu on assets</li>
+                <li>Sync status icons and a video badge on thumbnails</li>
+                <li>Queue Inspector available from the library</li>
+                <li>The sync index survives clearing the cache</li>
+              </ul>
+            </li>
+
+            <li class="release reveal">
+              <div class="release-head">
+                <span class="release-version">9.5.0</span>
+                <span class="release-date">May 2026</span>
+              </div>
+              <ul class="release-items">
+                <li>Library view to browse your Immich server in the app</li>
+                <li>Search by metadata, OCR, Smart Search, and timeline</li>
+                <li>Explore page for people, places, and things</li>
+                <li>Albums view with album creation and album sync</li>
+              </ul>
+            </li>
+          </ol>
+
+          <details class="earlier-releases">
+            <summary>Earlier releases</summary>
+            <ol class="timeline">
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">9.4</span>
+                  <span class="release-date">April 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Most settings apply as soon as you change them</li>
+                  <li>A single summary notification per sync batch</li>
+                  <li>One-click install with a <code>.flatpakref</code> file</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">9.1 – 9.3</span>
+                  <span class="release-date">April 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Every media format Immich supports, including AVIF, HEIF, JPEG XL, and MKV</li>
+                  <li>Native notifications that work inside Flatpak, with an on/off toggle</li>
+                  <li>Keyring storage that works inside Flatpak</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">9.0.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Uploads keep the correct date and timezone on the Immich timeline</li>
+                  <li>Save settings and change watch folders without restarting</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">8.0.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Health dashboard and per-folder sync status</li>
+                  <li>Quiet hours, and 1 to 10 upload workers</li>
+                  <li>First-run setup wizard</li>
+                  <li>Settings that work on Linux phones</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">7.0.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Queue Inspector with retry actions</li>
+                  <li>Pause, resume, and Sync Now controls</li>
+                  <li>Per-folder rules, and diagnostics export</li>
+                  <li>Pauses on metered networks and battery power</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">5.0 – 6.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>A startup scan catches files added while Mimick was closed</li>
+                  <li>Run on startup, and folder access through the Flatpak portal</li>
+                  <li>Signed Flatpak repository</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">3.0 – 4.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>Rewritten in Rust and GTK4, shrinking the app from about 80 MB to 2 MB</li>
+                  <li>Streaming uploads that use the same memory whatever the file size</li>
+                  <li>Flatpak packaging</li>
+                </ul>
+              </li>
+              <li class="release">
+                <div class="release-head">
+                  <span class="release-version">0.1 – 2.0</span>
+                  <span class="release-date">March 2026</span>
+                </div>
+                <ul class="release-items">
+                  <li>First release, later renamed from Immich Sync to Mimick</li>
+                  <li>LAN-first syncing that falls back to WAN</li>
+                  <li>A retry queue that persists across restarts</li>
+                </ul>
+              </li>
+            </ol>
+          </details>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-inner">
+        <p>
+          <span class="footer-label">App ID</span> <code>dev.nicx.mimick</code>
+        </p>
+        <a class="footer-link" href="https://mimick.nicx.dev/"
+          >mimick.nicx.dev</a
+        >
+      </div>
+    </footer>
+
+    <script>
+      const root = document.documentElement;
+      const themeToggle = document.getElementById("theme-toggle");
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      const themeKey = "mimick-theme";
+
+      const setTheme = (theme) => {
+        const isLight = theme === "light";
+        root.dataset.theme = isLight ? "light" : "dark";
+        if (themeMeta) {
+          themeMeta.setAttribute("content", isLight ? "#f8f5ef" : "#000000");
+        }
+        themeToggle.textContent = isLight ? "Dark Mode" : "Light Mode";
+        themeToggle.setAttribute("aria-pressed", isLight ? "true" : "false");
+      };
+
+      const savedTheme = localStorage.getItem(themeKey);
+      const prefersLight = globalThis.matchMedia(
+        "(prefers-color-scheme: light)",
+      ).matches;
+      let initialTheme = prefersLight ? "light" : "dark";
+      if (savedTheme === "light" || savedTheme === "dark") {
+        initialTheme = savedTheme;
+      }
+      setTheme(initialTheme);
+
+      themeToggle.addEventListener("click", () => {
+        const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
+        setTheme(nextTheme);
+        localStorage.setItem(themeKey, nextTheme);
+      });
+
+      const revealObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              const el = entry.target;
+              el.addEventListener("transitionend", () => {
+                el.style.transitionDelay = "";
+              }, { once: true });
+              el.classList.add("is-visible");
+              revealObserver.unobserve(el);
+            }
+          });
+        },
+        { rootMargin: "0px 0px -8% 0px" },
+      );
+      const observeReveals = (scope) => {
+        scope.querySelectorAll(".reveal:not(.is-visible)").forEach((el, i) => {
+          el.style.transitionDelay = `${Math.min(i, 6) * 60}ms`;
+          revealObserver.observe(el);
+        });
+      };
+      observeReveals(document);
+
+      document.getElementById("stat-shipped").textContent =
+        document.querySelectorAll(".release-items li").length;
+
+      const dateFormat = new Intl.DateTimeFormat(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+
+      const issueCard = (issue) => {
+        const card = document.createElement("a");
+        card.className = "issue-card reveal";
+        card.href = issue.html_url;
+
+        const number = document.createElement("span");
+        number.className = "issue-number";
+        number.textContent = `#${issue.number}`;
+
+        const title = document.createElement("strong");
+        title.className = "issue-title";
+        title.textContent = issue.title;
+
+        const meta = [`Opened ${dateFormat.format(new Date(issue.created_at))}`];
+        const votes = issue.reactions?.["+1"] ?? 0;
+        if (votes > 0) meta.push(`${votes} 👍`);
+        if (issue.comments > 0) meta.push(`${issue.comments} comments`);
+        const foot = document.createElement("span");
+        foot.className = "issue-foot";
+        foot.textContent = meta.join(" · ");
+
+        card.append(number, title, foot);
+        return card;
+      };
+
+      const fillGrid = (grid, issues, emptyText) => {
+        if (issues.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "issue-empty";
+          empty.textContent = emptyText;
+          grid.replaceChildren(empty);
+          return;
+        }
+        grid.replaceChildren(...issues.map(issueCard));
+        observeReveals(grid);
+      };
+
+      const plannedGrid = document.getElementById("issues-planned");
+      const otherGrid = document.getElementById("issues-other");
+
+      fetch("https://api.github.com/repos/nicx17/mimick/issues?state=open&per_page=100", {
+        headers: { Accept: "application/vnd.github+json" },
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+          return res.json();
+        })
+        .then((items) => {
+          const issues = items.filter((item) => !item.pull_request);
+          const isFeature = (issue) =>
+            issue.labels.some((label) => label.name === "enhancement");
+          fillGrid(plannedGrid, issues.filter(isFeature), "No planned features right now.");
+          fillGrid(otherGrid, issues.filter((i) => !isFeature(i)), "Nothing else open.");
+          document.getElementById("stat-open").textContent = issues.length;
+        })
+        .catch(() => {
+          const fallback = document.createElement("p");
+          fallback.className = "issue-empty";
+          fallback.append("Couldn't load issues right now. See them ");
+          const link = document.createElement("a");
+          link.href = "https://github.com/nicx17/mimick/issues";
+          link.textContent = "on GitHub";
+          fallback.append(link, ".");
+          plannedGrid.replaceChildren(fallback);
+          otherGrid.replaceChildren();
+          otherGrid.previousElementSibling.hidden = true;
+        });
+    </script>
+  </body>
+</html>

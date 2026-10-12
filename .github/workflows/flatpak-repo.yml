@@ -21,7 +21,7 @@ env:
 
 jobs:
   build-repo:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
 
@@ -41,6 +41,7 @@ jobs:
       - name: Copy landing page assets
         run: |
           cp site/index.html public/index.html
+          cp site/roadmap.html public/roadmap.html
           cp site/styles.css public/styles.css
           cp site/icon.png public/icon.png
           cp site/robots.txt public/robots.txt
@@ -70,7 +71,7 @@ jobs:
 
   deploy-pages:
     needs: build-repo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
