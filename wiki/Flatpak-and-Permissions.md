@@ -20,6 +20,8 @@ Mimick uses the [oo7](https://github.com/linux-credentials/oo7) crate for secure
 - **Outside Flatpak (native)**: Credentials are stored in the desktop's Secret Service (GNOME Keyring, KWallet) via the `org.freedesktop.secrets` D-Bus interface.
 
 > **Note:** On desktops other than GNOME and KDE (Hyprland, Sway, XFCE, i3, etc.), the Secret portal may not be configured out of the box. If saving your API key fails, see the [Keyring Setup](Keyring-Setup) guide.
+>
+> **Immich API Key Permissions vs Desktop Permissions:** This page documents local Linux sandbox and D-Bus portal permissions. For Immich server API key permissions (scopes needed for syncing, albums, sharing, and library browsing), see [API Key Security & Required Permissions](Configuration-and-First-Run#api-key-security--required-permissions).
 
 ### D-Bus Permissions
 

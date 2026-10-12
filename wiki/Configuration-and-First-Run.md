@@ -54,7 +54,7 @@ The window follows your desktop appearance preference, so it can render in eithe
     * Open your Immich Web Interface in a browser.
     * Go to **Account Settings** → **API Keys**.
     * Click **New API Key**, give it a name (like "Linux Desktop"), and click Create.
-    * Make sure the key includes **Asset (Read, View, Download, Upload, Update, Delete)**, **Album (Read, Create, Update)**, **User (Read)**, and **Person (Read)** permissions.
+    * Make sure the key includes the required scopes for your setup, or grant `all` for full functionality. See [API Key Security & Required Permissions](#api-key-security--required-permissions) for the granular per-feature mapping.
     * Copy the key and paste it into the API Key field in Mimick.
     * *The key is stored securely using the `oo7` crate (encrypted portal file in Flatpak, or D-Bus Secret Service native). On non-GNOME/KDE desktops you may need to configure the Secret portal first -- see [Keyring Setup](Keyring-Setup).*
 
@@ -147,6 +147,8 @@ The default is **Full**. If startup is slow on a large library you can switch to
 ### Saving Changes
 
 Click **Save Changes** after changing settings. Mimick saves the updated configuration and applies it to the running app immediately, including updated server URLs, watch folders, worker count, and pause policies.
+
+Most settings (worker count, quiet hours, folder rules, per-folder album, watch folder additions/removals) are applied live in the settings window. Connectivity edits (API key and server URLs) are save-only and require clicking **Save Changes** to take effect, preventing partial configuration during exploratory edits.
 
 The footer keeps **Close**, **Quit**, and **Save Changes** visible even if the current page needs scrolling.
 
@@ -347,27 +349,41 @@ When a watch path is stored as an object, these fields can appear:
 
 When generating an API Key in the Immich Web UI (Account Settings → API Keys), you can restrict its permissions for least-privilege use. Mimick maps to Immich's permission scopes as follows.
 
-**Base — required for any sync to work, even Upload Only:**
+**Base — required for any sync to work:**
 
 | Permission | Why |
 |---|---|
 | `user.read` | Establish current user session and identity |
 | `asset.upload` | Send media to the server |
 | `asset.update` | Apply correct timezone metadata after upload |
-| `album.read` | Look up the target album for a watch folder |
-| `album.create` | Auto-create the target album if it doesn't exist |
-| `albumAsset.create` | Link uploaded media to the target album |
 
-**Feature-specific — grant only if you use that feature:**
+**Optional — only required for the features you enable:**
 
 | Feature | Additional permissions |
 |---|---|
-| Library / Explore browsing inside Mimick | `asset.read`, `asset.view`, `asset.download`, `person.read` |
-| Sync Method set to **Full** or **Download Only** (folder rules) | `asset.read`, `asset.download` |
-| **Mirror Folder Deletions to Album** (folder rules toggle) | `asset.delete` and `albumAsset.delete` (used when the same asset is referenced by another watch folder, so we unlink instead of trashing) |
-| **Mirror Album Deletions to Folder** (folder rules toggle) | No additional remote permissions — `album.read` already lists the album, and the local trash is purely client-side |
+| Album-targeted watch folders | `album.read`, `album.create`, `albumAsset.create` |
+| Server Stats Dialog (click server name in Settings) | `server.about`, `server.versionCheck`, `server.statistics`, `asset.statistics` |
+| Library Footer Statistics (photo/video counts) | `asset.statistics` |
+| Server About dialog (click server row in library sidebar) | `server.about`, `server.versionCheck` |
+| Shared Albums (share your albums, change roles, remove people) | `album.read`, `albumUser.create`, `albumUser.update`, `albumUser.delete`, `user.read` |
+| Shared Links (create, copy, edit, delete public links) | `sharedLink.read`, `sharedLink.create`, `sharedLink.update`, `sharedLink.delete` |
+| Library / Explore view (browse photos inside Mimick) | `asset.read`, `asset.view`, `asset.download`, `person.read` |
+| Edit info / move to trash from the library | `asset.update`, `asset.delete` |
+| Trash view (restore, delete permanently, empty trash) | `asset.read`, `asset.delete` |
+| Tags in the details pane and tag search | `tag.read`; adding/removing tags also needs `tag.asset`, and creating new tags `tag.create` |
+| Archive (archive / unarchive from the library) | `asset.update` |
+| People page (rename, favorite, hide, birthday, merge) | `person.read`, `person.update`, `person.merge`; photo counts in a person's header need `person.statistics` |
+| Tags page (create, rename, recolor, delete tags) | `tag.read`, `tag.create`, `tag.update`, `tag.delete` |
+| Folders view | `folder.read` |
+| Partner sharing (add or remove partners) | `partner.read`, `partner.create`, `partner.delete`, `user.read` |
+| Rename albums and edit descriptions | `album.update` |
+| Counts and details in view headers | `asset.statistics`, `album.read`, `person.statistics` |
+| Hide pages for features turned off in your account | `userPreference.read` (without it, every page stays visible) |
+| **Sync Method** set to **Full** or **Download Only** (folder rules) | `asset.read`, `asset.download` |
+| **Mirror Folder Deletions to Album** (folder rules toggle) | `asset.delete` and `albumAsset.delete` (the latter is used when the same asset is referenced by another watch folder, so we just unlink instead of trashing) |
+| **Mirror Album Deletions to Folder** (folder rules toggle) | No additional remote permissions — the album listing is already covered by `album.read`, the trash happens locally |
 
-If you grant `all`, every feature works without further configuration. The list above is for users who prefer scoped keys.
+If you grant `all`, every feature works without further configuration. The granular list above is for users who prefer scoped keys.
 
 The bulk-upload-check endpoint Mimick uses for pre-flight dedup is covered by `asset.upload` (same scope as the upload it replaces).
 
