@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added an Archive sidebar entry, plus Archive / Unarchive in the right-click menu, the lightbox (or **A**), and the selection bar (#239).
 - Added an expander on the Albums sidebar row that shows your three most recently updated albums; the full album list below is now a collapsible **All Albums** section (#240).
 - Added a People sidebar page: search people, show hidden ones, open a person's photos, and rename, hide or unhide, set a birthday, or merge people from each face's menu (#235).
+- Added a Tags sidebar page: browse the tag tree, open a tag's photos, and create, rename, recolor, or delete tags. Renaming needs a newer Immich than v3.0.0; older servers show an error (#237).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed

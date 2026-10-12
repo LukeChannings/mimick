@@ -64,6 +64,10 @@ pub enum LibrarySource {
         id: String,
         name: String,
     },
+    Tag {
+        id: String,
+        name: String,
+    },
 }
 
 impl LibrarySource {

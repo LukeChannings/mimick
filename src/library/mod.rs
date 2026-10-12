@@ -71,6 +71,7 @@ mod server_stats_dialog;
 mod shared_link_dialog;
 mod shared_links_view;
 pub mod staging_view;
+mod tags_view;
 mod trash_view;
 mod upload_picker;
 mod window_layout;
@@ -111,6 +112,7 @@ struct LibraryWindowUi {
     albums: AlbumsViewParts,
     shared_links: shared_links_view::SharedLinksView,
     people: people_view::PeopleView,
+    tags: tags_view::TagsView,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -165,6 +167,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     actions::connect_bulk_archive(ui.clone());
     trash_view::connect_trash_controls(ui.clone());
     people_view::connect_people_view(ui.clone());
+    tags_view::connect_tags_view(ui.clone());
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
     connect_grid_handlers(ui.clone());
@@ -1138,6 +1141,15 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
+        LibrarySource::Tag { id, .. } => {
+            let filters = MetadataSearchFilters {
+                order,
+                tag_ids: Some(vec![id]),
+                ..MetadataSearchFilters::default()
+            };
+            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
+                .await
+        }
         LibrarySource::Archive => {
             api.search_metadata_with_filters(&visibility_filters("archive", order), page, PAGE_SIZE)
                 .await
@@ -1383,6 +1395,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Person { .. } => {
             select_fixed_row(&ui.sidebar.fixed_list, "people");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::Tag { .. } => {
+            select_fixed_row(&ui.sidebar.fixed_list, "tags");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Archive => {

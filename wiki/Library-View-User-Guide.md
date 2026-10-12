@@ -29,6 +29,7 @@ The window uses a sidebar + content split.
 - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
 - **People** — everyone Immich has recognized (see [People](#people))
+- **Tags** — your tag tree (see [Tags page](#tags-page))
 - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - the arrow on **Albums** expands your three most recently updated albums
@@ -335,6 +336,15 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
   - **Set Birthday…**: pick a date, or **Remove** it.
   - **Hide** / **Unhide**: hidden people don't appear in People or Explore.
   - **Merge People…**: tick the people who are really this person; their faces move to them. This can't be undone.
+
+---
+
+## Tags page
+
+- The **Tags** sidebar entry lists your top-level tags. Click a tag to see its photos; the **›** button opens the tags inside it, and the path at the top takes you back up.
+- **+** creates a tag at the current level.
+- Each tag's **⋯** menu has **Rename…**, **Change Color…** (a preset or a custom color), and **Delete…**.
+- Renaming tags needs a newer Immich than v3.0.0; older servers show an error instead.
 
 ---
 

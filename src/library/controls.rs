@@ -334,6 +334,7 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                 }
                 "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
                 "people" => super::people_view::show(&ui),
+                "tags" => super::tags_view::show(&ui),
                 "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
                 "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
                 "archive" => sidebar_dispatch(ui.clone(), LibrarySource::Archive),
@@ -417,7 +418,7 @@ fn show_albums_page(ui: &Rc<LibraryWindowUi>, shared_only: bool) {
 pub(super) fn sidebar_dispatch(ui: Rc<LibraryWindowUi>, source: LibrarySource) {
     let on_page = matches!(
         ui.content_stack.visible_child_name().as_deref(),
-        Some("albums" | "shared-links" | "people")
+        Some("albums" | "shared-links" | "people" | "tags")
     );
     if !on_page && ui.ctx.library_state.lock().source == source {
         return;

@@ -74,6 +74,7 @@ pub(super) struct ContentParts {
     albums: AlbumsViewParts,
     shared_links: SharedLinksView,
     people: super::people_view::PeopleView,
+    tags: super::tags_view::TagsView,
     search_view: SearchViewParts,
     controls: ControlsParts,
     banner: gtk::Label,
@@ -145,6 +146,8 @@ impl ContentParts {
         stack.add_named(&shared_links.root, Some("shared-links"));
         let people = super::people_view::build_people_view();
         stack.add_named(&people.root, Some("people"));
+        let tags = super::tags_view::build_tags_view();
+        stack.add_named(&tags.root, Some("tags"));
         Self {
             sidebar: build_sidebar(),
             grid,
@@ -152,6 +155,7 @@ impl ContentParts {
             albums,
             shared_links,
             people,
+            tags,
             search_view: build_search_view(),
             controls: build_controls(),
             banner: build_timeline_banner(),
@@ -199,6 +203,7 @@ impl LibraryWindowUi {
             albums: content.albums,
             shared_links: content.shared_links,
             people: content.people,
+            tags: content.tags,
             content_stack: content.stack,
             error_label: content.error_label,
             transfer_bar: content.transfer.bar,
