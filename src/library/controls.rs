@@ -387,6 +387,9 @@ pub(super) fn update_back_button(ui: &Rc<LibraryWindowUi>) {
 /// Pop the navigation history and switch to the previous source. Returns
 /// true if a back-step was taken, false when the history was empty.
 pub(super) fn navigate_back(ui: Rc<LibraryWindowUi>) -> bool {
+    if return_to_parent_page(&ui) {
+        return true;
+    }
     let request = ui.ctx.library_state.lock().navigate_back();
     if let Some(request) = request {
         apply_timeline_ui_state(&ui, &request.1);
@@ -396,6 +399,31 @@ pub(super) fn navigate_back(ui: Rc<LibraryWindowUi>) -> bool {
     } else {
         false
     }
+}
+
+pub(super) fn showing_page(ui: &LibraryWindowUi) -> bool {
+    matches!(
+        ui.content_stack.visible_child_name().as_deref(),
+        Some("albums" | "shared-links" | "people" | "tags" | "folders" | "sharing")
+    )
+}
+
+fn return_to_parent_page(ui: &Rc<LibraryWindowUi>) -> bool {
+    let showing_photos = matches!(
+        ui.content_stack.visible_child_name().as_deref(),
+        Some("grid" | "loading" | "empty" | "error")
+    );
+    if !showing_photos {
+        return false;
+    }
+    let source = ui.ctx.library_state.lock().source.clone();
+    match source {
+        LibrarySource::Person { .. } => super::people_view::show(ui),
+        LibrarySource::Tag { .. } => super::tags_view::show(ui),
+        LibrarySource::Folder { .. } => super::folders_view::show(ui),
+        _ => return false,
+    }
+    true
 }
 
 /// Common path for sidebar selections. Skips redundant dispatches so the
@@ -418,11 +446,7 @@ fn show_albums_page(ui: &Rc<LibraryWindowUi>, shared_only: bool) {
 }
 
 pub(super) fn sidebar_dispatch(ui: Rc<LibraryWindowUi>, source: LibrarySource) {
-    let on_page = matches!(
-        ui.content_stack.visible_child_name().as_deref(),
-        Some("albums" | "shared-links" | "people" | "tags" | "folders" | "sharing")
-    );
-    if !on_page && ui.ctx.library_state.lock().source == source {
+    if !showing_page(&ui) && ui.ctx.library_state.lock().source == source {
         return;
     }
     let request = ui.ctx.library_state.lock().navigate_to(source);

@@ -1393,6 +1393,9 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         let row = build_album_sidebar_row(ui, &album);
         ui.sidebar.albums_list.append(&row);
     }
+    if controls::showing_page(ui) {
+        return;
+    }
 
     match selected_source {
         LibrarySource::Timeline => {
