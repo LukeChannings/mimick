@@ -329,6 +329,7 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
                 "explore" => sidebar_dispatch(ui.clone(), LibrarySource::Explore),
                 "trash" => sidebar_dispatch(ui.clone(), LibrarySource::Trash),
                 "favorites" => sidebar_dispatch(ui.clone(), LibrarySource::Favorites),
+                "archive" => sidebar_dispatch(ui.clone(), LibrarySource::Archive),
                 "albums" => show_albums_page(&ui, false),
                 "shared-albums" => show_albums_page(&ui, true),
                 "shared-links" => super::shared_links_view::show(&ui),

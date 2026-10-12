@@ -28,6 +28,7 @@ The window uses a sidebar + content split.
 - **Albums** — album landing page
 - **Shared Albums** — albums shared with you and by you (see [Shared Albums](#shared-albums))
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
+- **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - album entries listed below for quick navigation
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
@@ -323,6 +324,14 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 
 ---
 
+## Archive
+
+- Archiving hides an asset from the **Photos** timeline without deleting it.
+- Archive from the right-click menu, the lightbox's archive button (or **A**), or the selection bar.
+- The **Archive** sidebar entry lists archived assets; **Unarchive** there puts them back in Photos.
+
+---
+
 ## Trash
 
 The **Trash** sidebar entry lists everything in the Immich trash in the normal grid.
@@ -344,3 +353,4 @@ The **Trash** sidebar entry lists everything in the Immich trash in the normal g
 | **Esc** | Exit selection mode |
 | **Delete** | Move the selection (grid) or the current asset (lightbox) to the trash; in the Trash view, delete permanently |
 | **F** | Toggle favorite for the current asset (lightbox) |
+| **A** | Archive or unarchive the current asset (lightbox) |

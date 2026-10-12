@@ -180,6 +180,20 @@ pub(super) fn connect_bulk_share_link(ui: Rc<LibraryWindowUi>, button: &gtk::But
     });
 }
 
+pub(super) fn connect_bulk_archive(ui: Rc<LibraryWindowUi>) {
+    ui.bulk_archive.clone().connect_clicked(move |_| {
+        let archived = !matches!(
+            ui.ctx.library_state.lock().source,
+            super::state::LibrarySource::Archive
+        );
+        let ui_done = ui.clone();
+        super::archive::set_archived(&ui, selected_items(&ui), archived, move |_| {
+            ui_done.grid.selection.unselect_all();
+            ui_done.select_toggle.set_active(false);
+        });
+    });
+}
+
 pub(super) fn selection_count(selection: &gtk::MultiSelection) -> u32 {
     let bitset = selection.selection();
     bitset.size() as u32
@@ -358,6 +372,7 @@ mod tests {
             width: 0,
             height: 0,
             is_favorite: false,
+            is_archived: false,
         })
     }
 

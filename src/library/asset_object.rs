@@ -65,6 +65,9 @@ mod imp {
         /// Favorite flag from Immich; drives the heart badge and heart buttons.
         #[property(get, set)]
         is_favorite: Cell<bool>,
+
+        #[property(get, set)]
+        is_archived: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -95,6 +98,7 @@ pub struct AssetInit<'a> {
     pub width: u32,
     pub height: u32,
     pub is_favorite: bool,
+    pub is_archived: bool,
 }
 
 impl AssetObject {
@@ -112,6 +116,7 @@ impl AssetObject {
             .property("width", init.width)
             .property("height", init.height)
             .property("is-favorite", init.is_favorite)
+            .property("is-archived", init.is_archived)
             .build()
     }
 

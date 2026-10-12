@@ -59,6 +59,7 @@ pub enum LibrarySource {
     Trash,
     /// Assets marked as favorites.
     Favorites,
+    Archive,
 }
 
 impl LibrarySource {
@@ -336,6 +337,7 @@ mod tests {
             checksum: None,
             exif_info: None,
             is_favorite: false,
+            visibility: String::new(),
         }
     }
 

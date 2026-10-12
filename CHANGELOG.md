@@ -17,10 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added favorites: a heart button in the lightbox (or **F**), menu and Edit Info toggles, a heart badge on favorited thumbnails, and a Favorites sidebar entry.
 - Added a Shared Albums sidebar entry, and a Share dialog for your albums (add people, change Viewer/Editor roles, remove people).
 - Added shared links: create a public link from an album, a selection, or the right-click menu (description, expiry, password, download/upload/metadata options), and manage all links from the new Shared Links sidebar entry (copy, edit, delete).
+- Added an Archive sidebar entry, plus Archive / Unarchive in the right-click menu, the lightbox (or **A**), and the selection bar (#239).
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
 
+- Archived photos no longer appear in the Photos timeline, matching Immich (#239).
 - Bumped Flatpak runtime and CI builder image to GNOME 51.
 - Updated GitHub Actions dependencies (`taiki-e/install-action`, `github/codeql-action`).
 - Redesigned tags in the details pane as colored pill chips with an inline remove button, a "+" header button, and an empty state.

@@ -62,6 +62,7 @@ pub(super) struct BulkParts {
     pub download: gtk::Button,
     pub clear: gtk::Button,
     pub share_link: gtk::Button,
+    archive: gtk::Button,
     trash: TrashControls,
 }
 
@@ -211,6 +212,7 @@ impl LibraryWindowUi {
             back_button: header.back_button,
             select_toggle: header.select_toggle,
             bulk_bar: content.bulk.bar,
+            bulk_archive: content.bulk.archive,
             trash: content.bulk.trash,
             bulk_count_label: content.bulk.count_label,
             album_link_row: content.album_link.row,
@@ -479,6 +481,10 @@ fn bulk_buttons() -> (gtk::Button, gtk::Button, gtk::Button, gtk::Button) {
 fn build_bulk_bar() -> BulkParts {
     let count_label = gtk::Label::builder().xalign(0.0).hexpand(true).build();
     let (delete, download, clear, share_link) = bulk_buttons();
+    let archive = gtk::Button::builder()
+        .icon_name("mimick-archive-symbolic")
+        .tooltip_text("Archive selected")
+        .build();
     let inner = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(8)
@@ -494,10 +500,12 @@ fn build_bulk_bar() -> BulkParts {
         delete.clone(),
         download.clone(),
         share_link.clone(),
+        archive.clone(),
     ]);
     inner.append(&count_label);
     inner.append(&clear);
     inner.append(&share_link);
+    inner.append(&archive);
     inner.append(&download);
     inner.append(&delete);
     inner.append(&trash.restore_selected);
@@ -514,6 +522,7 @@ fn build_bulk_bar() -> BulkParts {
         download,
         clear,
         share_link,
+        archive,
         trash,
     }
 }

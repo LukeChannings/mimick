@@ -16,6 +16,7 @@ use crate::library::asset_object::AssetObject;
 use crate::library::local_exif::{self, LocalExif};
 
 use super::actions::{TrashTarget, confirm_trash};
+use super::archive::{archive_icon, archive_tooltip, set_archived};
 use super::asset_edit::show_edit_dialog;
 use super::asset_tags::TagSection;
 use super::context_menu::{AssetMenuHooks, show_asset_context_menu};
@@ -428,6 +429,7 @@ struct AssetInfo {
     created: String,
     sync_state: u32,
     favorite: bool,
+    archived: bool,
 }
 
 impl AssetInfo {
@@ -440,6 +442,7 @@ impl AssetInfo {
             created: item.property("created-at"),
             sync_state: item.property("sync-state"),
             favorite: item.is_favorite(),
+            archived: item.is_archived(),
         }
     }
 
@@ -570,6 +573,7 @@ struct ActionBar {
     resolution_toggle: gtk::ToggleButton,
     download: gtk::Button,
     favorite: gtk::Button,
+    archive: gtk::Button,
     trash: gtk::Button,
     zoom_group: gtk::Box,
     zoom_in: gtk::Button,
@@ -741,6 +745,7 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
     let download = icon_button("mimick-download-symbolic", "Download asset");
     let trash = icon_button("user-trash-symbolic", "Move to trash (Delete)");
     let favorite = icon_button(heart_icon(false), heart_tooltip(false));
+    let archive = icon_button(archive_icon(false), archive_tooltip(false));
     let zoom_out = icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)");
     let zoom_in = icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)");
     let zoom_reset = gtk::Button::builder()
@@ -766,6 +771,7 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
     bar.append(&spacer);
     bar.append(&resolution_toggle);
     bar.append(&favorite);
+    bar.append(&archive);
     bar.append(&download);
     bar.append(&trash);
     ActionBar {
@@ -773,6 +779,7 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
         resolution_toggle,
         download,
         favorite,
+        archive,
         trash,
         zoom_group,
         zoom_in,
@@ -1158,6 +1165,10 @@ impl Lightbox {
             .favorite
             .connect_clicked(move |_| lb.toggle_current_favorite());
         let lb = self.clone();
+        self.actions
+            .archive
+            .connect_clicked(move |_| lb.toggle_current_archive());
+        let lb = self.clone();
         self.details
             .edit_btn
             .connect_clicked(move |_| lb.edit_current());
@@ -1260,6 +1271,28 @@ impl Lightbox {
             .set_tooltip_text(Some(heart_tooltip(favorite)));
     }
 
+    fn toggle_current_archive(self: &Rc<Self>) {
+        let Some(item) = self.current_item() else {
+            return;
+        };
+        let archived = !item.is_archived();
+        let lb = self.clone();
+        set_archived(&self.ui, vec![item], archived, move |removed| {
+            if removed {
+                lb.after_trash();
+            } else {
+                lb.show_archive(archived);
+            }
+        });
+    }
+
+    fn show_archive(&self, archived: bool) {
+        self.actions.archive.set_icon_name(archive_icon(archived));
+        self.actions
+            .archive
+            .set_tooltip_text(Some(archive_tooltip(archived)));
+    }
+
     fn after_edit(self: &Rc<Self>, date_changed: bool) {
         if date_changed {
             self.reload_on_close.set(true);
@@ -1304,6 +1337,7 @@ impl Lightbox {
                 .set_active(!self.header.details_btn.is_active()),
             (false, gtk::gdk::Key::Delete) => self.confirm_trash_current(),
             (false, gtk::gdk::Key::f) | (false, gtk::gdk::Key::F) => self.toggle_current_favorite(),
+            (false, gtk::gdk::Key::a) | (false, gtk::gdk::Key::A) => self.toggle_current_archive(),
             (false, gtk::gdk::Key::Escape) => {
                 self.ui.nav.pop();
             }
@@ -1471,6 +1505,8 @@ impl Lightbox {
         self.actions.trash.set_visible(on_server && !in_trash);
         self.actions.favorite.set_visible(on_server && !in_trash);
         self.show_heart(info.favorite);
+        self.actions.archive.set_visible(on_server && !in_trash);
+        self.show_archive(info.archived);
         self.details.edit_btn.set_visible(on_server && !in_trash);
         self.actions.zoom_group.set_visible(!info.is_video());
 

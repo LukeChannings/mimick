@@ -304,6 +304,17 @@ impl ImmichApiClient {
         }
     }
 
+    pub async fn set_assets_visibility(
+        &self,
+        asset_ids: &[String],
+        visibility: &str,
+    ) -> Result<(), String> {
+        let body = serde_json::json!({ "ids": asset_ids, "visibility": visibility });
+        self.send_json(reqwest::Method::PUT, "/api/assets", Some(body))
+            .await
+            .map(|_| ())
+    }
+
     /// Soft-delete specified assets from the Immich server.
     pub async fn delete_assets(&self, asset_ids: &[String]) -> Result<(), String> {
         self.delete_assets_with(asset_ids, false).await

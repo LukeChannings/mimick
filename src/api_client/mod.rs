@@ -178,6 +178,14 @@ pub struct LibraryAsset {
     /// Whether the asset is marked as a favorite.
     #[serde(rename = "isFavorite", default)]
     pub is_favorite: bool,
+    #[serde(default)]
+    pub visibility: String,
+}
+
+impl LibraryAsset {
+    pub fn is_archived(&self) -> bool {
+        self.visibility == "archive"
+    }
 }
 
 /// Immich returns asset checksums as base64-encoded SHA1, while Mimick computes

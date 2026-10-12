@@ -200,6 +200,7 @@ fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetOb
                 width,
                 height,
                 is_favorite: asset.is_favorite,
+                is_archived: asset.is_archived(),
             });
             if let Some(path) = local_match {
                 object.set_property("local-path", path);

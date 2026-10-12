@@ -40,6 +40,7 @@ pub(super) const LOCAL_ID_PREFIX: &str = "local::";
 
 pub mod album_sync;
 pub mod albums_view;
+mod archive;
 pub mod asset_model;
 pub mod asset_object;
 pub mod explore_view;
@@ -125,6 +126,7 @@ struct LibraryWindowUi {
     back_button: gtk::Button,
     select_toggle: gtk::ToggleButton,
     bulk_bar: gtk::Revealer,
+    bulk_archive: gtk::Button,
     trash: trash_view::TrashControls,
     bulk_count_label: gtk::Label,
     album_link_row: libadwaita::ActionRow,
@@ -157,6 +159,7 @@ pub fn build_library_window(app: &libadwaita::Application, ctx: Arc<AppContext>)
     connect_select_mode(ui.clone(), ui.select_toggle.clone());
     connect_bulk_actions(ui.clone(), bulk_delete, bulk_download, bulk_clear);
     actions::connect_bulk_share_link(ui.clone(), &bulk_share_link);
+    actions::connect_bulk_archive(ui.clone());
     trash_view::connect_trash_controls(ui.clone());
     connect_sidebar_handlers(ui.clone());
     connect_controls(ui.clone());
@@ -772,6 +775,14 @@ fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     // Source-mode (Remote/Local/Unified) only relevant inside an album.
     ui.source_revealer.set_reveal_child(in_album);
     trash_view::set_trash_mode(ui, matches!(source, LibrarySource::Trash));
+    let in_archive = matches!(source, LibrarySource::Archive);
+    ui.bulk_archive
+        .set_icon_name(archive::archive_icon(in_archive));
+    ui.bulk_archive.set_tooltip_text(Some(if in_archive {
+        "Unarchive selected"
+    } else {
+        "Archive selected"
+    }));
 
     if in_album {
         ui.upload_button.set_tooltip_text(Some("Upload to album"));
@@ -1107,7 +1118,16 @@ async fn fetch_remote_page(
 ) -> PageResult {
     match source {
         LibrarySource::AllAssets | LibrarySource::Timeline => {
-            api.search_metadata("", page, PAGE_SIZE, order).await
+            api.search_metadata_with_filters(
+                &visibility_filters("timeline", order),
+                page,
+                PAGE_SIZE,
+            )
+            .await
+        }
+        LibrarySource::Archive => {
+            api.search_metadata_with_filters(&visibility_filters("archive", order), page, PAGE_SIZE)
+                .await
         }
         LibrarySource::Album { id, .. } => {
             api.fetch_album_assets(&id, page, PAGE_SIZE, order).await
@@ -1140,6 +1160,14 @@ async fn fetch_remote_page(
                 .await
         }
         other => unreachable!("{other:?} is not a remote page source"),
+    }
+}
+
+fn visibility_filters(visibility: &str, order: Option<SortOrder>) -> MetadataSearchFilters {
+    MetadataSearchFilters {
+        order,
+        visibility: Some(visibility.to_string()),
+        ..MetadataSearchFilters::default()
     }
 }
 
@@ -1179,7 +1207,13 @@ async fn fetch_unified_page(
     let api = &ui.ctx.api_client;
     match source {
         LibrarySource::Unified => {
-            let remote = api.search_metadata("", page, PAGE_SIZE, order).await;
+            let remote = api
+                .search_metadata_with_filters(
+                    &visibility_filters("timeline", order),
+                    page,
+                    PAGE_SIZE,
+                )
+                .await;
             merge_unified_page(remote, page, ui, None).await
         }
         LibrarySource::UnifiedSearch { query } => {
@@ -1331,6 +1365,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Favorites => {
             select_fixed_row(&ui.sidebar.fixed_list, "favorites");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::Archive => {
+            select_fixed_row(&ui.sidebar.fixed_list, "archive");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Trash => {
@@ -1592,6 +1630,7 @@ fn local_to_library_asset(local: LocalAsset) -> LibraryAsset {
         checksum: None,
         exif_info: None,
         is_favorite: false,
+        visibility: String::new(),
     }
 }
 

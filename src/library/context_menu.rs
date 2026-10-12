@@ -15,6 +15,7 @@ use crate::library::asset_object::AssetObject;
 use super::LOCAL_ID_PREFIX;
 use super::LibraryWindowUi;
 use super::actions::{TrashTarget, confirm_trash};
+use super::archive::{archive_label, set_archived};
 use super::asset_edit::show_edit_dialog;
 use super::download::{
     begin_download_session, finish_download_item, open_local_with_default_app, start_download,
@@ -175,6 +176,7 @@ fn append_manage_buttons(
     }
 
     append_favorite_button(menu, ui, item, &hooks);
+    append_archive_button(menu, ui, item, &hooks);
     let (ui_link, link_id) = (ui.clone(), remote_id.clone());
     menu.add("Create Share Link…", false, move || {
         super::shared_link_dialog::present(
@@ -232,6 +234,27 @@ fn append_favorite_button(
             on_removed: on_trashed.clone(),
         };
         toggle_favorite(&ui, &item, hooks);
+    });
+}
+
+fn append_archive_button(
+    menu: &Menu,
+    ui: &Rc<LibraryWindowUi>,
+    item: &AssetObject,
+    hooks: &AssetMenuHooks,
+) {
+    let archived = item.is_archived();
+    let (ui, item) = (ui.clone(), item.clone());
+    let (on_edited, on_trashed) = (hooks.on_edited.clone(), hooks.on_trashed.clone());
+    menu.add(archive_label(archived), false, move || {
+        let (on_edited, on_trashed) = (on_edited.clone(), on_trashed.clone());
+        set_archived(&ui, vec![item.clone()], !archived, move |removed| {
+            if removed {
+                on_trashed()
+            } else {
+                on_edited(false)
+            }
+        });
     });
 }
 
