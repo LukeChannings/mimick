@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use gtk::prelude::*;
+
 use crate::api_client::LibraryAsset;
 use crate::library::asset_object::AssetObject;
 
@@ -72,6 +74,16 @@ pub(super) fn set_archived(
         }
         on_done(removed);
     });
+}
+
+pub(super) fn sync_bulk_button(button: &gtk::Button, source: &LibrarySource) {
+    let in_archive = matches!(source, LibrarySource::Archive);
+    button.set_icon_name(archive_icon(in_archive));
+    button.set_tooltip_text(Some(if in_archive {
+        "Unarchive selected"
+    } else {
+        "Archive selected"
+    }));
 }
 
 fn leaves_view(source: &LibrarySource, archived: bool) -> bool {

@@ -77,7 +77,7 @@ fn connect_window_actions(ui: &Rc<LibraryWindowUi>) {
     ));
 }
 
-/// Upload and back buttons, plus the Alt+Left and F5 shortcuts.
+/// Upload button and the F5 shortcut; Back is wired in `connect_back_controls`.
 fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
     ui.upload_button.connect_clicked(clone!(
         #[strong]
@@ -86,7 +86,27 @@ fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
             super::upload_picker::pick_and_upload(&ui.window, ui.ctx.clone(), current_album(&ui));
         }
     ));
+    connect_back_controls(ui);
 
+    let f5_controller = gtk::EventControllerKey::new();
+    f5_controller.connect_key_pressed(clone!(
+        #[strong]
+        ui,
+        move |_, keyval, _, _| {
+            if keyval != gtk::gdk::Key::F5 {
+                return glib::Propagation::Proceed;
+            }
+            let _ = ui
+                .window
+                .upcast_ref::<gtk::Widget>()
+                .activate_action("win.refresh", None);
+            glib::Propagation::Stop
+        }
+    ));
+    ui.window.add_controller(f5_controller);
+}
+
+fn connect_back_controls(ui: &Rc<LibraryWindowUi>) {
     ui.back_button.connect_clicked(clone!(
         #[strong]
         ui,
@@ -128,23 +148,6 @@ fn connect_navigation_controls(ui: &Rc<LibraryWindowUi>) {
     let alt_left_controller = gtk::ShortcutController::new();
     alt_left_controller.add_shortcut(alt_left);
     ui.window.add_controller(alt_left_controller);
-
-    let f5_controller = gtk::EventControllerKey::new();
-    f5_controller.connect_key_pressed(clone!(
-        #[strong]
-        ui,
-        move |_, keyval, _, _| {
-            if keyval != gtk::gdk::Key::F5 {
-                return glib::Propagation::Proceed;
-            }
-            let _ = ui
-                .window
-                .upcast_ref::<gtk::Widget>()
-                .activate_action("win.refresh", None);
-            glib::Propagation::Stop
-        }
-    ));
-    ui.window.add_controller(f5_controller);
 }
 
 /// The sort dropdown changes options per view and sorts the visible content.

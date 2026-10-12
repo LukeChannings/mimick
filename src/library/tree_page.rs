@@ -30,6 +30,25 @@ pub(super) fn build_tree_page(empty_icon: &str) -> TreePage {
         .margin_end(12)
         .build();
     toolbar.append(&crumb_scroller);
+    let (scroller, list, empty) = build_list_area(empty_icon);
+    let root = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    root.append(&toolbar);
+    root.append(&scroller);
+    TreePage {
+        root,
+        toolbar,
+        list,
+        crumbs,
+        crumb_scroller,
+        empty,
+    }
+}
+
+fn build_list_area(
+    empty_icon: &str,
+) -> (gtk::ScrolledWindow, gtk::ListBox, libadwaita::StatusPage) {
     let list = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .css_classes(["boxed-list"])
@@ -58,19 +77,7 @@ pub(super) fn build_tree_page(empty_icon: &str) -> TreePage {
         .vexpand(true)
         .child(&clamp)
         .build();
-    let root = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .build();
-    root.append(&toolbar);
-    root.append(&scroller);
-    TreePage {
-        root,
-        toolbar,
-        list,
-        crumbs,
-        crumb_scroller,
-        empty,
-    }
+    (scroller, list, empty)
 }
 
 pub(super) fn show_empty_state(page: &TreePage, empty: Option<(&str, &str)>) {

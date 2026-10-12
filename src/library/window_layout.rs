@@ -41,10 +41,10 @@ pub(super) struct ControlsParts {
 }
 
 pub(super) struct TransferParts {
-    bar: gtk::Box,
-    progress: gtk::ProgressBar,
-    icon: gtk::Image,
-    label: gtk::Label,
+    pub bar: gtk::Box,
+    pub progress: gtk::ProgressBar,
+    pub icon: gtk::Image,
+    pub label: gtk::Label,
 }
 
 pub(super) struct AlbumLinkParts {
@@ -224,10 +224,7 @@ impl LibraryWindowUi {
             header: content.header,
             content_stack: content.stack,
             error_label: content.error_label,
-            transfer_bar: content.transfer.bar,
-            transfer_progress: content.transfer.progress,
-            transfer_icon: content.transfer.icon,
-            transfer_label: content.transfer.label,
+            transfer: content.transfer,
             search_view: content.search_view,
             sort_mode: controls.sort_mode,
             source_mode: controls.source_mode,

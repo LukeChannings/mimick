@@ -276,8 +276,41 @@ fn delete_tag(ui: &Rc<LibraryWindowUi>, tag: &Tag) {
     );
 }
 
+type ChosenColor = Rc<RefCell<String>>;
+
 fn pick_color(ui: &Rc<LibraryWindowUi>, tag: &Tag) {
-    let chosen = Rc::new(RefCell::new(tag.color.clone().unwrap_or_default()));
+    let chosen: ChosenColor = Rc::new(RefCell::new(tag.color.clone().unwrap_or_default()));
+    let (swatches, buttons) = color_swatches(&chosen);
+    let body = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(12)
+        .build();
+    body.append(&swatches);
+    body.append(&custom_color_row(tag, &chosen, buttons));
+    let dialog = libadwaita::AlertDialog::builder()
+        .heading(format!("Color for “{}”", tag.name))
+        .extra_child(&body)
+        .build();
+    dialog.add_response("cancel", "Cancel");
+    dialog.add_response("save", "Save");
+    dialog.set_response_appearance("save", libadwaita::ResponseAppearance::Suggested);
+    dialog.set_default_response(Some("save"));
+    dialog.set_close_response("cancel");
+    let (ui_save, tag_id) = (ui.clone(), tag.id.clone());
+    dialog.connect_response(None, move |_, response| {
+        let color = chosen.borrow().clone();
+        if response != "save" || color.is_empty() {
+            return;
+        }
+        let (api, tag_id) = (ui_save.ctx.api_client.clone(), tag_id.clone());
+        run(&ui_save, "Could Not Change Color", async move {
+            api.set_tag_color(&tag_id, &color).await
+        });
+    });
+    dialog.present(Some(&ui.window));
+}
+
+fn color_swatches(chosen: &ChosenColor) -> (gtk::FlowBox, Rc<Vec<gtk::ToggleButton>>) {
     let swatches = gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .homogeneous(true)
@@ -313,6 +346,14 @@ fn pick_color(ui: &Rc<LibraryWindowUi>, tag: &Tag) {
         });
         swatches.append(swatch);
     }
+    (swatches, buttons)
+}
+
+fn custom_color_row(
+    tag: &Tag,
+    chosen: &ChosenColor,
+    swatches: Rc<Vec<gtk::ToggleButton>>,
+) -> gtk::Box {
     let custom = gtk::ColorDialogButton::builder()
         .dialog(&gtk::ColorDialog::builder().with_alpha(false).build())
         .halign(gtk::Align::Center)
@@ -325,47 +366,21 @@ fn pick_color(ui: &Rc<LibraryWindowUi>, tag: &Tag) {
     {
         custom.set_rgba(&rgba);
     }
-    let (chosen_custom, buttons_custom) = (chosen.clone(), buttons.clone());
+    let chosen = chosen.clone();
     custom.connect_rgba_notify(move |button| {
-        for swatch in buttons_custom.iter() {
+        for swatch in swatches.iter() {
             swatch.set_active(false);
         }
-        *chosen_custom.borrow_mut() = rgba_hex(&button.rgba());
+        *chosen.borrow_mut() = rgba_hex(&button.rgba());
     });
-    let custom_row = gtk::Box::builder()
+    let row = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(8)
         .halign(gtk::Align::Center)
         .build();
-    custom_row.append(&gtk::Label::new(Some("Custom")));
-    custom_row.append(&custom);
-    let body = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(12)
-        .build();
-    body.append(&swatches);
-    body.append(&custom_row);
-    let dialog = libadwaita::AlertDialog::builder()
-        .heading(format!("Color for “{}”", tag.name))
-        .extra_child(&body)
-        .build();
-    dialog.add_response("cancel", "Cancel");
-    dialog.add_response("save", "Save");
-    dialog.set_response_appearance("save", libadwaita::ResponseAppearance::Suggested);
-    dialog.set_default_response(Some("save"));
-    dialog.set_close_response("cancel");
-    let (ui_save, tag_id) = (ui.clone(), tag.id.clone());
-    dialog.connect_response(None, move |_, response| {
-        let color = chosen.borrow().clone();
-        if response != "save" || color.is_empty() {
-            return;
-        }
-        let (api, tag_id) = (ui_save.ctx.api_client.clone(), tag_id.clone());
-        run(&ui_save, "Could Not Change Color", async move {
-            api.set_tag_color(&tag_id, &color).await
-        });
-    });
-    dialog.present(Some(&ui.window));
+    row.append(&gtk::Label::new(Some("Custom")));
+    row.append(&custom);
+    row
 }
 
 fn rgba_hex(rgba: &gtk::gdk::RGBA) -> String {

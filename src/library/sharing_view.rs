@@ -182,96 +182,117 @@ fn change(ui: &Rc<LibraryWindowUi>, heading: &'static str, add: bool, user_id: S
     });
 }
 
-fn present_add_dialog(ui: &Rc<LibraryWindowUi>) {
-    let search = gtk::SearchEntry::builder()
-        .placeholder_text("Find people by name or email")
-        .build();
-    let list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(["boxed-list"])
-        .valign(gtk::Align::Start)
-        .build();
-    let status = gtk::Label::builder()
-        .label("Loading people…")
-        .wrap(true)
-        .css_classes(["dim-label"])
-        .build();
-    let body = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(12)
-        .margin_top(6)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
-    body.append(&search);
-    body.append(&status);
-    body.append(&list);
-    let scroller = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .propagate_natural_height(true)
-        .vexpand(true)
-        .child(&body)
-        .build();
-    let toolbar = libadwaita::ToolbarView::new();
-    toolbar.add_top_bar(&libadwaita::HeaderBar::new());
-    toolbar.set_content(Some(&scroller));
-    let dialog = libadwaita::Dialog::builder()
-        .title("Add Partner")
-        .content_width(420)
-        .content_height(520)
-        .child(&toolbar)
-        .build();
+#[derive(Clone)]
+struct AddPartnerDialog {
+    ui: Rc<LibraryWindowUi>,
+    dialog: libadwaita::Dialog,
+    search: gtk::SearchEntry,
+    list: gtk::ListBox,
+    status: gtk::Label,
+    users: Rc<RefCell<Vec<UserSummary>>>,
+    excluded: Rc<RefCell<Vec<String>>>,
+}
 
-    let users: Rc<RefCell<Vec<UserSummary>>> = Rc::default();
-    let excluded: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(
-        ui.sharing
+fn present_add_dialog(ui: &Rc<LibraryWindowUi>) {
+    let add = AddPartnerDialog::build(ui);
+    let add_for_search = add.clone();
+    add.search
+        .connect_search_changed(move |_| add_for_search.fill());
+    add.load();
+    add.dialog.present(Some(&ui.window));
+}
+
+impl AddPartnerDialog {
+    fn build(ui: &Rc<LibraryWindowUi>) -> Self {
+        let search = gtk::SearchEntry::builder()
+            .placeholder_text("Find people by name or email")
+            .build();
+        let list = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .css_classes(["boxed-list"])
+            .valign(gtk::Align::Start)
+            .build();
+        let status = gtk::Label::builder()
+            .label("Loading people…")
+            .wrap(true)
+            .css_classes(["dim-label"])
+            .build();
+        let body = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(12)
+            .margin_top(6)
+            .margin_bottom(12)
+            .margin_start(12)
+            .margin_end(12)
+            .build();
+        body.append(&search);
+        body.append(&status);
+        body.append(&list);
+        let excluded = ui
+            .sharing
             .partners
             .borrow()
             .iter()
             .map(|p| p.id.clone())
-            .collect(),
-    ));
-    let fill: Rc<dyn Fn()> = {
-        let (ui, list, status, search, dialog) = (
-            ui.clone(),
-            list.clone(),
-            status.clone(),
-            search.clone(),
-            dialog.clone(),
-        );
-        let (users, excluded) = (users.clone(), excluded.clone());
-        Rc::new(move || {
-            list.remove_all();
-            let users = users.borrow();
-            let candidates = addable_users(&users, &excluded.borrow(), &search.text());
-            for user in &candidates {
-                list.append(&add_row(&ui, &dialog, user));
-            }
-            status.set_visible(candidates.is_empty());
-            status.set_label(if users.is_empty() {
-                "No other people found. Listing people needs the 'user.read' permission."
-            } else {
-                "No one matches your search."
-            });
-            list.set_visible(!candidates.is_empty());
-        })
-    };
-    let fill_search = fill.clone();
-    search.connect_search_changed(move |_| fill_search());
+            .collect();
+        Self {
+            ui: ui.clone(),
+            dialog: dialog_with_body(&body),
+            search,
+            list,
+            status,
+            users: Rc::default(),
+            excluded: Rc::new(RefCell::new(excluded)),
+        }
+    }
 
-    let ui_load = ui.clone();
-    glib::MainContext::default().spawn_local(async move {
-        if let Some(me) = super::ensure_current_user_id(&ui_load.ctx).await {
-            excluded.borrow_mut().push(me);
+    fn fill(&self) {
+        self.list.remove_all();
+        let users = self.users.borrow();
+        let candidates = addable_users(&users, &self.excluded.borrow(), &self.search.text());
+        for user in &candidates {
+            self.list.append(&add_row(&self.ui, &self.dialog, user));
         }
-        match ui_load.ctx.api_client.list_users().await {
-            Ok(list) => *users.borrow_mut() = list,
-            Err(err) => log::warn!("Could not list users for partners: {}", err),
-        }
-        fill();
-    });
-    dialog.present(Some(&ui.window));
+        self.status.set_visible(candidates.is_empty());
+        self.status.set_label(if users.is_empty() {
+            "No other people found. Listing people needs the 'user.read' permission."
+        } else {
+            "No one matches your search."
+        });
+        self.list.set_visible(!candidates.is_empty());
+    }
+
+    fn load(&self) {
+        let add = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            if let Some(me) = super::ensure_current_user_id(&add.ui.ctx).await {
+                add.excluded.borrow_mut().push(me);
+            }
+            match add.ui.ctx.api_client.list_users().await {
+                Ok(list) => *add.users.borrow_mut() = list,
+                Err(err) => log::warn!("Could not list users for partners: {}", err),
+            }
+            add.fill();
+        });
+    }
+}
+
+fn dialog_with_body(body: &gtk::Box) -> libadwaita::Dialog {
+    let scroller = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .propagate_natural_height(true)
+        .vexpand(true)
+        .child(body)
+        .build();
+    let toolbar = libadwaita::ToolbarView::new();
+    toolbar.add_top_bar(&libadwaita::HeaderBar::new());
+    toolbar.set_content(Some(&scroller));
+    libadwaita::Dialog::builder()
+        .title("Add Partner")
+        .content_width(420)
+        .content_height(520)
+        .child(&toolbar)
+        .build()
 }
 
 fn add_row(

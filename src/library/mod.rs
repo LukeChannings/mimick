@@ -64,9 +64,11 @@ mod controls;
 mod dialogs;
 mod download;
 mod folders_view;
+mod header_format;
 mod lightbox;
 mod navigation;
 mod people_view;
+mod person_merge_dialog;
 pub mod search_filters;
 pub mod search_view;
 mod server_stats_dialog;
@@ -123,10 +125,7 @@ struct LibraryWindowUi {
     header: source_header::SourceHeader,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
-    transfer_bar: gtk::Box,
-    transfer_progress: gtk::ProgressBar,
-    transfer_icon: gtk::Image,
-    transfer_label: gtk::Label,
+    transfer: window_layout::TransferParts,
     search_view: SearchViewParts,
     sort_mode: gtk::DropDown,
     source_mode: gtk::DropDown,
@@ -781,14 +780,7 @@ fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     // Source-mode (Remote/Local/Unified) only relevant inside an album.
     ui.source_revealer.set_reveal_child(in_album);
     trash_view::set_trash_mode(ui, matches!(source, LibrarySource::Trash));
-    let in_archive = matches!(source, LibrarySource::Archive);
-    ui.bulk_archive
-        .set_icon_name(archive::archive_icon(in_archive));
-    ui.bulk_archive.set_tooltip_text(Some(if in_archive {
-        "Unarchive selected"
-    } else {
-        "Archive selected"
-    }));
+    archive::sync_bulk_button(&ui.bulk_archive, source);
 
     if in_album {
         ui.upload_button.set_tooltip_text(Some("Upload to album"));
@@ -1448,9 +1440,9 @@ fn update_transfer_ui(ui: &LibraryWindowUi) {
         state.transfer.clone()
     };
     if !transfer.active {
-        ui.transfer_bar.remove_css_class("active");
-        ui.transfer_progress.set_fraction(0.0);
-        ui.transfer_icon.set_visible(false);
+        ui.transfer.bar.remove_css_class("active");
+        ui.transfer.progress.set_fraction(0.0);
+        ui.transfer.icon.set_visible(false);
         let idle_summary =
             if transfer.last_upload_avg_bps > 0.0 || transfer.last_download_avg_bps > 0.0 {
                 format!(
@@ -1461,17 +1453,17 @@ fn update_transfer_ui(ui: &LibraryWindowUi) {
             } else {
                 "Idle  No recent transfer session".to_string()
             };
-        ui.transfer_label.set_label(&idle_summary);
+        ui.transfer.label.set_label(&idle_summary);
         return;
     }
-    ui.transfer_bar.add_css_class("active");
+    ui.transfer.bar.add_css_class("active");
 
     let icon_name = match transfer.direction {
         TransferDirection::Upload => "mimick-upload-symbolic",
         TransferDirection::Download => "mimick-download-symbolic",
     };
-    ui.transfer_icon.set_icon_name(Some(icon_name));
-    ui.transfer_icon.set_visible(true);
+    ui.transfer.icon.set_icon_name(Some(icon_name));
+    ui.transfer.icon.set_visible(true);
 
     let detail = transfer
         .active_item_label
@@ -1482,17 +1474,17 @@ fn update_transfer_ui(ui: &LibraryWindowUi) {
         });
     let live_speed = format_rate(transfer.instant_bps);
     let avg_speed = format_rate(transfer.session_avg_bps);
-    ui.transfer_label
-        .set_label(&format!("{detail}  {live_speed}  avg {avg_speed}"));
+    let summary = format!("{detail}  {live_speed}  avg {avg_speed}");
+    ui.transfer.label.set_label(&summary);
 
     match transfer.total_bytes {
         Some(total) if total > 0 => {
-            ui.transfer_progress.set_show_text(false);
-            ui.transfer_progress
-                .set_fraction((transfer.current_bytes as f64 / total as f64).clamp(0.0, 1.0));
+            ui.transfer.progress.set_show_text(false);
+            let fraction = (transfer.current_bytes as f64 / total as f64).clamp(0.0, 1.0);
+            ui.transfer.progress.set_fraction(fraction);
         }
         _ => {
-            ui.transfer_progress.pulse();
+            ui.transfer.progress.pulse();
         }
     }
 }

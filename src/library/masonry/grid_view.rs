@@ -22,6 +22,20 @@ pub struct GridViewParts {
     pub context_menu_handler: AssetContextMenuHandler,
 }
 
+fn scrolled_content(canvas: &MasonryCanvas) -> (gtk::ScrolledWindow, gtk::Box) {
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .build();
+    content.append(canvas);
+    let scrolled = gtk::ScrolledWindow::builder()
+        .child(&content)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    (scrolled, content)
+}
+
 pub fn build_grid_view(
     ctx: Arc<AppContext>,
     select_toggle: gtk::ToggleButton,
@@ -69,16 +83,7 @@ pub fn build_grid_view(
         });
     }
 
-    let content = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .build();
-    content.append(&canvas);
-    let scrolled = gtk::ScrolledWindow::builder()
-        .child(&content)
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vexpand(true)
-        .hexpand(true)
-        .build();
+    let (scrolled, content) = scrolled_content(&canvas);
 
     GridViewParts {
         model,

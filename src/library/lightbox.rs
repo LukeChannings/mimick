@@ -746,19 +746,7 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
     let trash = icon_button("user-trash-symbolic", "Move to trash (Delete)");
     let favorite = icon_button(heart_icon(false), heart_tooltip(false));
     let archive = icon_button(archive_icon(false), archive_tooltip(false));
-    let zoom_out = icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)");
-    let zoom_in = icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)");
-    let zoom_reset = gtk::Button::builder()
-        .label("100%")
-        .tooltip_text("Reset zoom (Ctrl+0)")
-        .build();
-    let zoom_group = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .css_classes(vec!["linked".to_string()])
-        .build();
-    zoom_group.append(&zoom_out);
-    zoom_group.append(&zoom_reset);
-    zoom_group.append(&zoom_in);
+    let (zoom_group, zoom_out, zoom_reset, zoom_in) = build_zoom_group();
     let bar = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(4)
@@ -786,6 +774,23 @@ fn build_action_bar(initial_full: bool) -> ActionBar {
         zoom_out,
         zoom_reset,
     }
+}
+
+fn build_zoom_group() -> (gtk::Box, gtk::Button, gtk::Button, gtk::Button) {
+    let zoom_out = icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)");
+    let zoom_in = icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)");
+    let zoom_reset = gtk::Button::builder()
+        .label("100%")
+        .tooltip_text("Reset zoom (Ctrl+0)")
+        .build();
+    let group = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .css_classes(vec!["linked".to_string()])
+        .build();
+    group.append(&zoom_out);
+    group.append(&zoom_reset);
+    group.append(&zoom_in);
+    (group, zoom_out, zoom_reset, zoom_in)
 }
 
 fn build_details_pane() -> DetailsPane {

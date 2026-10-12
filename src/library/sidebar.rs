@@ -154,16 +154,10 @@ pub fn build_sidebar() -> SidebarParts {
 
     let fixed_list = selectable_list();
     let (connection_list, connection_row, server_row) = build_footer();
-    let recent_expander = gtk::ToggleButton::builder()
-        .icon_name("pan-end-symbolic")
-        .tooltip_text("Show recent albums")
-        .valign(gtk::Align::Center)
-        .css_classes(["flat", "circular"])
-        .visible(false)
-        .build();
     let recent_rows: Vec<libadwaita::ActionRow> = (0..RECENT_ALBUM_COUNT)
         .map(|_| recent_album_row())
         .collect();
+    let recent_expander = build_recent_expander(recent_rows.clone());
     for (title, subtitle, icon, key) in FIXED_ROWS {
         let row = action_row(title, subtitle, icon, key);
         fixed_list.append(&row);
@@ -174,8 +168,47 @@ pub fn build_sidebar() -> SidebarParts {
             }
         }
     }
-    let rows = recent_rows.clone();
-    recent_expander.connect_toggled(move |button| {
+    let (albums_expander, albums_list) = build_all_albums();
+    root.append(&scrolling_lists(&fixed_list, &albums_expander));
+    root.append(&connection_list);
+
+    SidebarParts {
+        root,
+        connection_row,
+        server_row,
+        fixed_list,
+        albums_list,
+        recent_expander,
+        recent_rows,
+        album_signature: RefCell::default(),
+    }
+}
+
+// The fixed rows and albums scroll together so the sidebar fits short (720 px) screens;
+// only the connection footer stays pinned.
+fn scrolling_lists(fixed_list: &gtk::ListBox, albums: &gtk::Expander) -> gtk::ScrolledWindow {
+    let lists = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(12)
+        .build();
+    lists.append(fixed_list);
+    lists.append(albums);
+    gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .vexpand(true)
+        .child(&lists)
+        .build()
+}
+
+fn build_recent_expander(rows: Vec<libadwaita::ActionRow>) -> gtk::ToggleButton {
+    let expander = gtk::ToggleButton::builder()
+        .icon_name("pan-end-symbolic")
+        .tooltip_text("Show recent albums")
+        .valign(gtk::Align::Center)
+        .css_classes(["flat", "circular"])
+        .visible(false)
+        .build();
+    expander.connect_toggled(move |button| {
         let expanded = button.is_active();
         button.set_icon_name(if expanded {
             "pan-down-symbolic"
@@ -191,49 +224,24 @@ pub fn build_sidebar() -> SidebarParts {
             row.set_visible(expanded && recent_album_key(row.upcast_ref()).is_some());
         }
     });
+    expander
+}
 
-    let albums_header = gtk::Label::builder()
+fn build_all_albums() -> (gtk::Expander, gtk::ListBox) {
+    let header = gtk::Label::builder()
         .label("All Albums")
         .xalign(0.0)
         .css_classes(vec!["heading".to_string(), "dim-label".to_string()])
         .build();
-
-    let albums_list = selectable_list();
-    let albums_expander = gtk::Expander::builder()
-        .label_widget(&albums_header)
+    let list = selectable_list();
+    list.set_margin_top(12);
+    let expander = gtk::Expander::builder()
+        .label_widget(&header)
         .expanded(true)
         .margin_top(6)
-        .child(&albums_list)
+        .child(&list)
         .build();
-    albums_list.set_margin_top(12);
-
-    // The fixed rows and albums scroll together so the sidebar fits short (720 px) screens;
-    // only the connection footer stays pinned.
-    let lists = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(12)
-        .build();
-    lists.append(&fixed_list);
-    lists.append(&albums_expander);
-    let lists_scroll = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vexpand(true)
-        .child(&lists)
-        .build();
-
-    root.append(&lists_scroll);
-    root.append(&connection_list);
-
-    SidebarParts {
-        root,
-        connection_row,
-        server_row,
-        fixed_list,
-        albums_list,
-        recent_expander,
-        recent_rows,
-        album_signature: RefCell::default(),
-    }
+    (expander, list)
 }
 
 pub fn album_list_changed(parts: &SidebarParts, albums: &[LibraryAlbum]) -> bool {

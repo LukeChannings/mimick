@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use chrono::{DateTime, Datelike, NaiveDate};
 use gtk::prelude::*;
 
 use crate::api_client::{LibraryAlbum, MetadataSearchFilters, SharedLinkTarget};
@@ -10,6 +9,9 @@ use super::LibraryWindowUi;
 use super::asset_tags::color_dot;
 use super::dialogs::popover_menu;
 use super::explore_view::spawn_person_thumbnail;
+use super::header_format::{
+    album_details, capitalize, count_label, count_noun, owns_album, person_details,
+};
 use super::state::{LibrarySource, Location};
 use super::tree_page::{leaf_name, parent_path};
 
@@ -35,7 +37,54 @@ enum Leading {
     TagColor(Option<String>),
 }
 
+struct HeaderTop {
+    root: gtk::Box,
+    leading: gtk::Box,
+    title: gtk::Label,
+    facts: gtk::Label,
+    actions: gtk::Box,
+}
+
 pub(super) fn build_source_header() -> SourceHeader {
+    let top = build_header_top();
+    let description = gtk::Label::builder()
+        .xalign(0.0)
+        .wrap(true)
+        .wrap_mode(gtk::pango::WrapMode::WordChar)
+        .visible(false)
+        .build();
+    let extra = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(6)
+        .build();
+    let root = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(10)
+        .margin_top(16)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+    root.append(&top.root);
+    root.append(&description);
+    root.append(&extra);
+    let (status, status_error) = build_status_stack();
+    SourceHeader {
+        root,
+        extra,
+        status,
+        leading: top.leading,
+        title: top.title,
+        facts: top.facts,
+        description,
+        actions: top.actions,
+        status_error,
+        count: RefCell::default(),
+        details: RefCell::default(),
+    }
+}
+
+fn build_header_top() -> HeaderTop {
     let leading = gtk::Box::builder().valign(gtk::Align::Center).build();
     let title = gtk::Label::builder()
         .xalign(0.0)
@@ -61,32 +110,20 @@ pub(super) fn build_source_header() -> SourceHeader {
         .spacing(6)
         .valign(gtk::Align::Center)
         .build();
-    let top = gtk::Box::builder().spacing(12).build();
-    top.append(&leading);
-    top.append(&text);
-    top.append(&actions);
-    let description = gtk::Label::builder()
-        .xalign(0.0)
-        .wrap(true)
-        .wrap_mode(gtk::pango::WrapMode::WordChar)
-        .visible(false)
-        .build();
-    let extra = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(6)
-        .build();
-    let root = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(10)
-        .margin_top(16)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
-    root.append(&top);
-    root.append(&description);
-    root.append(&extra);
+    let root = gtk::Box::builder().spacing(12).build();
+    root.append(&leading);
+    root.append(&text);
+    root.append(&actions);
+    HeaderTop {
+        root,
+        leading,
+        title,
+        facts,
+        actions,
+    }
+}
 
+fn build_status_stack() -> (gtk::Stack, gtk::Label) {
     let error_view = super::build_status_view(
         "dialog-warning-symbolic",
         "Library data unavailable",
@@ -111,20 +148,7 @@ pub(super) fn build_source_header() -> SourceHeader {
         Some("empty"),
     );
     status.add_named(&error_view, Some("error"));
-
-    SourceHeader {
-        root,
-        extra,
-        status,
-        leading,
-        title,
-        facts,
-        description,
-        actions,
-        status_error,
-        count: RefCell::default(),
-        details: RefCell::default(),
-    }
+    (status, status_error)
 }
 
 pub(super) fn set_status(ui: &LibraryWindowUi, status: &str, error: Option<&str>) {
@@ -296,35 +320,10 @@ fn show_album(ui: &Rc<LibraryWindowUi>, album: LibraryAlbum, me: &str) {
     let header = &ui.header;
     header.title.set_label(&album.album_name);
     *header.count.borrow_mut() = Some(count_label(album.asset_count.into()));
-    let mut details = Vec::new();
-    if let Some(range) = format_date_range(album.start_date.as_deref(), album.end_date.as_deref()) {
-        details.push(range);
-    }
-    let owner_id = album.owner_id().to_string();
-    if !owner_id.is_empty() && owner_id != me {
-        let owner = album
-            .album_users
-            .iter()
-            .find(|member| member.user.id == owner_id)
-            .map(|member| member.user.name.clone())
-            .unwrap_or_default();
-        if !owner.is_empty() {
-            details.push(format!("Shared by {owner}"));
-        }
-    } else {
-        let others = album.album_users.len().saturating_sub(1);
-        if others > 0 {
-            details.push(match others {
-                1 => "Shared with 1 person".to_string(),
-                n => format!("Shared with {n} people"),
-            });
-        }
-    }
-    set_details(header, details);
+    set_details(header, album_details(&album, me));
     set_description(header, Some(&album.description));
-    if owner_id.is_empty() || owner_id == me {
-        let ui_share = ui.clone();
-        let share_album = album.clone();
+    if owns_album(&album, me) {
+        let (ui_share, share_album) = (ui.clone(), album.clone());
         add_action(header, "emblem-shared-symbolic", "Share album", move || {
             super::album_share_dialog::present(ui_share.clone(), share_album.clone())
         });
@@ -474,140 +473,4 @@ fn render_facts(header: &SourceHeader) {
     let text = parts.join(" · ");
     header.facts.set_label(&text);
     header.facts.set_visible(!text.is_empty());
-}
-
-fn capitalize(text: &str) -> String {
-    let mut chars = text.chars();
-    chars
-        .next()
-        .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
-        .unwrap_or_default()
-}
-
-fn group_thousands(n: u64) -> String {
-    let digits = n.to_string();
-    let mut out = String::new();
-    for (index, ch) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            out.push(',');
-        }
-        out.push(ch);
-    }
-    out
-}
-
-fn count_noun(n: u64, singular: &str, plural: &str) -> String {
-    format!(
-        "{} {}",
-        group_thousands(n),
-        if n == 1 { singular } else { plural }
-    )
-}
-
-fn count_label(n: u64) -> String {
-    count_noun(n, "item", "items")
-}
-
-fn parse_day(value: &str) -> Option<NaiveDate> {
-    DateTime::parse_from_rfc3339(value)
-        .map(|dt| dt.date_naive())
-        .ok()
-        .or_else(|| NaiveDate::parse_from_str(value.get(..10)?, "%Y-%m-%d").ok())
-}
-
-fn age_on(birth: NaiveDate, today: NaiveDate) -> i32 {
-    let mut age = today.year() - birth.year();
-    if (today.month(), today.day()) < (birth.month(), birth.day()) {
-        age -= 1;
-    }
-    age
-}
-
-fn person_details(birth_date: Option<&str>, today: NaiveDate) -> Vec<String> {
-    let Some(birth) = birth_date.and_then(parse_day) else {
-        return Vec::new();
-    };
-    vec![
-        format!("Age {}", age_on(birth, today)),
-        format!("Born {}", birth.format("%-d %b %Y")),
-    ]
-}
-
-fn format_date_range(start: Option<&str>, end: Option<&str>) -> Option<String> {
-    let start = start.and_then(parse_day);
-    let end = end.and_then(parse_day);
-    let (start, end) = match (start, end) {
-        (Some(start), Some(end)) => (start.min(end), start.max(end)),
-        (Some(day), None) | (None, Some(day)) => (day, day),
-        (None, None) => return None,
-    };
-    let full = |day: NaiveDate| day.format("%-d %b %Y").to_string();
-    Some(if start == end {
-        full(start)
-    } else if start.year() == end.year() && start.month() == end.month() {
-        format!("{}–{}", start.format("%-d"), full(end))
-    } else if start.year() == end.year() {
-        format!("{} – {}", start.format("%-d %b"), full(end))
-    } else {
-        format!("{} – {}", full(start), full(end))
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
-        NaiveDate::from_ymd_opt(y, m, d).unwrap()
-    }
-
-    #[test]
-    fn age_counts_whole_years() {
-        assert_eq!(age_on(day(1990, 5, 4), day(2026, 5, 3)), 35);
-        assert_eq!(age_on(day(1990, 5, 4), day(2026, 5, 4)), 36);
-    }
-
-    #[test]
-    fn person_details_show_age_and_birthday() {
-        assert_eq!(
-            person_details(Some("1990-05-04"), day(2026, 10, 12)),
-            ["Age 36", "Born 4 May 1990"]
-        );
-        assert!(person_details(None, day(2026, 10, 12)).is_empty());
-    }
-
-    #[test]
-    fn date_ranges_collapse_shared_parts() {
-        let range = |a: &str, b: &str| format_date_range(Some(a), Some(b)).unwrap();
-        assert_eq!(
-            range("2024-05-04T10:00:00.000Z", "2024-05-04T18:00:00.000Z"),
-            "4 May 2024"
-        );
-        assert_eq!(
-            range("2024-05-04T10:00:00.000Z", "2024-05-09T10:00:00.000Z"),
-            "4–9 May 2024"
-        );
-        assert_eq!(
-            range("2024-05-04T10:00:00.000Z", "2024-06-09T10:00:00.000Z"),
-            "4 May – 9 Jun 2024"
-        );
-        assert_eq!(
-            range("2023-12-30T10:00:00.000Z", "2024-01-02T10:00:00.000Z"),
-            "30 Dec 2023 – 2 Jan 2024"
-        );
-        assert_eq!(format_date_range(None, None), None);
-    }
-
-    #[test]
-    fn counts_group_thousands_and_pluralize() {
-        assert_eq!(count_label(1), "1 item");
-        assert_eq!(count_label(1234567), "1,234,567 items");
-        assert_eq!(count_noun(0, "photo", "photos"), "0 photos");
-    }
-
-    #[test]
-    fn capitalize_first_letter_only() {
-        assert_eq!(capitalize("beach"), "Beach");
-        assert_eq!(capitalize(""), "");
-    }
 }
