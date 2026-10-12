@@ -71,6 +71,35 @@ pub enum LibrarySource {
     Folder {
         path: String,
     },
+    Place {
+        city: String,
+    },
+    Thing {
+        query: String,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibraryPage {
+    Albums { shared_only: bool },
+    SharedLinks,
+    People,
+    Tags { path: Option<String> },
+    Folders { path: Option<String> },
+    Sharing,
+    Search,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Location {
+    Source(LibrarySource),
+    Page(LibraryPage),
+}
+
+impl Location {
+    pub fn is_search(&self) -> bool {
+        matches!(self, Location::Source(source) if source.is_search())
+    }
 }
 
 impl LibrarySource {
@@ -129,7 +158,8 @@ pub struct LibraryState {
     /// Stack of past sources for back-navigation. Pushed by `navigate_to`,
     /// popped by `navigate_back`. Searches are not pushed (they are ephemeral).
     /// `VecDeque` for O(1) front pops when the 50-entry cap is hit.
-    pub nav_history: VecDeque<LibrarySource>,
+    pub nav_history: VecDeque<Location>,
+    pub location: Location,
     pub sort_mode: LibrarySortMode,
     pub load_state: LibraryLoadState,
     pub selected_asset_id: Option<String>,
@@ -148,6 +178,7 @@ impl Default for LibraryState {
             source: LibrarySource::AllAssets,
             previous_non_search_source: LibrarySource::AllAssets,
             nav_history: VecDeque::new(),
+            location: Location::Source(LibrarySource::AllAssets),
             sort_mode: LibrarySortMode::NewestFirst,
             load_state: LibraryLoadState::Idle,
             selected_asset_id: None,
@@ -190,27 +221,25 @@ impl LibraryState {
         (self.generation, source, 1)
     }
 
-    /// Switch to `source`, recording the current source in nav_history first
-    /// so back-navigation can return to it. Searches are not pushed (they're
-    /// ephemeral). No-ops when navigating to the source we're already on.
-    pub fn navigate_to(&mut self, source: LibrarySource) -> (u64, LibrarySource, u32) {
-        if self.source != source
-            && !self.source.is_search()
-            && self.nav_history.back() != Some(&self.source)
-        {
-            self.nav_history.push_back(self.source.clone());
+    pub fn navigate_to(&mut self, location: Location) -> bool {
+        if self.location == location {
+            return false;
+        }
+        let replace = self.location.is_search() && location.is_search();
+        if !replace && self.nav_history.back() != Some(&self.location) {
+            self.nav_history.push_back(self.location.clone());
             if self.nav_history.len() > 50 {
                 self.nav_history.pop_front();
             }
         }
-        self.switch_source(source)
+        self.location = location;
+        true
     }
 
-    /// Pop one entry from nav_history and switch to it. Does not push to
-    /// history. Returns None when there's nowhere to go back to.
-    pub fn navigate_back(&mut self) -> Option<(u64, LibrarySource, u32)> {
-        let prev = self.nav_history.pop_back()?;
-        Some(self.switch_source(prev))
+    pub fn navigate_back(&mut self) -> Option<Location> {
+        let previous = self.nav_history.pop_back()?;
+        self.location = previous.clone();
+        Some(previous)
     }
 
     pub fn can_go_back(&self) -> bool {
@@ -445,58 +474,77 @@ mod tests {
         assert_eq!(page, 1);
     }
 
-    #[test]
-    fn test_trash_is_a_browsable_source_not_a_search() {
-        let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        let (_, source, page) = state.navigate_to(LibrarySource::Trash);
-        assert_eq!(source, LibrarySource::Trash);
-        assert_eq!(page, 1);
-        assert!(!source.is_search());
-
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
+    fn source(source: LibrarySource) -> Location {
+        Location::Source(source)
     }
 
     #[test]
-    fn test_navigate_back_pops_history() {
+    fn navigate_back_pops_history() {
         let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::Album {
+        state.navigate_to(Location::Page(LibraryPage::Albums { shared_only: false }));
+        state.navigate_to(source(LibrarySource::Album {
             id: "a1".into(),
             name: "Trips".into(),
-        });
-        state.navigate_to(LibrarySource::Explore);
+        }));
 
         assert!(state.can_go_back());
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::Album { .. }));
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
+        assert_eq!(
+            state.navigate_back(),
+            Some(Location::Page(LibraryPage::Albums { shared_only: false }))
+        );
+        assert_eq!(
+            state.navigate_back(),
+            Some(source(LibrarySource::AllAssets))
+        );
         assert!(!state.can_go_back());
         assert!(state.navigate_back().is_none());
     }
 
     #[test]
-    fn test_navigate_skips_searches_in_history() {
+    fn navigating_to_the_current_location_is_a_noop() {
         let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::SmartSearch {
-            query: "sunset".into(),
-        });
-        // Going from a search to another non-search must NOT push the search.
-        state.navigate_to(LibrarySource::Explore);
-        // History should be [AllAssets], not [AllAssets, SmartSearch].
-        let (_, source, _) = state.navigate_back().unwrap();
-        assert!(matches!(source, LibrarySource::AllAssets));
+        assert!(!state.navigate_to(source(LibrarySource::AllAssets)));
         assert!(!state.can_go_back());
     }
 
     #[test]
-    fn test_navigate_to_same_source_is_noop_for_history() {
+    fn refining_a_search_replaces_it_but_leaving_it_keeps_it() {
         let mut state = LibraryState::new();
-        state.navigate_to(LibrarySource::AllAssets);
-        state.navigate_to(LibrarySource::AllAssets);
-        assert!(!state.can_go_back());
+        state.navigate_to(Location::Page(LibraryPage::Search));
+        state.navigate_to(source(LibrarySource::SmartSearch {
+            query: "sun".into(),
+        }));
+        state.navigate_to(source(LibrarySource::SmartSearch {
+            query: "sunset".into(),
+        }));
+        state.navigate_to(source(LibrarySource::Trash));
+
+        assert_eq!(
+            state.navigate_back(),
+            Some(source(LibrarySource::SmartSearch {
+                query: "sunset".into()
+            }))
+        );
+        assert_eq!(
+            state.navigate_back(),
+            Some(Location::Page(LibraryPage::Search))
+        );
+        assert_eq!(
+            state.navigate_back(),
+            Some(source(LibrarySource::AllAssets))
+        );
+    }
+
+    #[test]
+    fn tag_drill_down_is_recorded() {
+        let mut state = LibraryState::new();
+        state.navigate_to(Location::Page(LibraryPage::Tags { path: None }));
+        state.navigate_to(Location::Page(LibraryPage::Tags {
+            path: Some("Trips".into()),
+        }));
+        assert_eq!(
+            state.navigate_back(),
+            Some(Location::Page(LibraryPage::Tags { path: None }))
+        );
     }
 }

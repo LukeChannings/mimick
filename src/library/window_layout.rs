@@ -77,6 +77,7 @@ pub(super) struct ContentParts {
     tags: super::tags_view::TagsView,
     folders: super::folders_view::FoldersView,
     sharing: super::sharing_view::SharingView,
+    header: super::source_header::SourceHeader,
     search_view: SearchViewParts,
     controls: ControlsParts,
     banner: gtk::Label,
@@ -154,6 +155,13 @@ impl ContentParts {
         stack.add_named(&folders.page.root, Some("folders"));
         let sharing = super::sharing_view::build_sharing_view();
         stack.add_named(&sharing.root, Some("sharing"));
+        let header = super::source_header::build_source_header();
+        let album_link = build_album_link();
+        let bulk = build_bulk_bar();
+        header.extra.append(&album_link.listbox);
+        header.extra.append(&bulk.trash.bar);
+        grid.content.prepend(&header.status);
+        grid.content.prepend(&header.root);
         Self {
             sidebar: build_sidebar(),
             grid,
@@ -164,14 +172,15 @@ impl ContentParts {
             tags,
             folders,
             sharing,
+            header,
             search_view: build_search_view(),
             controls: build_controls(),
             banner: build_timeline_banner(),
             stack,
             error_label,
             transfer: build_transfer_bar(),
-            album_link: build_album_link(),
-            bulk: build_bulk_bar(),
+            album_link,
+            bulk,
         }
     }
 
@@ -182,8 +191,6 @@ impl ContentParts {
             .build();
         column.append(&self.controls.root);
         column.append(&self.search_view.root);
-        column.append(&self.album_link.listbox);
-        column.append(&self.bulk.trash.bar);
         column.append(&self.banner);
         column.append(&self.stack);
         column.append(&self.bulk.bar);
@@ -214,6 +221,7 @@ impl LibraryWindowUi {
             tags: content.tags,
             folders: content.folders,
             sharing: content.sharing,
+            header: content.header,
             content_stack: content.stack,
             error_label: content.error_label,
             transfer_bar: content.transfer.bar,
@@ -460,10 +468,6 @@ fn build_album_link() -> AlbumLinkParts {
     let listbox = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .css_classes(vec!["boxed-list".to_string()])
-        .margin_start(12)
-        .margin_end(12)
-        .margin_top(4)
-        .margin_bottom(4)
         .visible(false)
         .build();
     listbox.append(&row);
@@ -499,7 +503,11 @@ fn bulk_buttons() -> (gtk::Button, gtk::Button, gtk::Button, gtk::Button) {
 }
 
 fn build_bulk_bar() -> BulkParts {
-    let count_label = gtk::Label::builder().xalign(0.0).hexpand(true).build();
+    let count_label = gtk::Label::builder()
+        .xalign(0.0)
+        .hexpand(true)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .build();
     let (delete, download, clear, share_link) = bulk_buttons();
     let archive = gtk::Button::builder()
         .icon_name("mimick-archive-symbolic")

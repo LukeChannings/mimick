@@ -13,7 +13,7 @@ use super::dialogs::{TextPrompt, confirm, popover_menu, prompt_text};
 use super::explore_view::spawn_person_thumbnail;
 use super::state::LibrarySource;
 
-const AVATAR_SIZE: i32 = 88;
+const AVATAR_SIZE: i32 = 120;
 
 pub(super) struct PeopleView {
     pub root: gtk::Box,
@@ -168,23 +168,20 @@ fn display_name(person: &Person) -> &str {
     }
 }
 
-fn avatar(ui: &LibraryWindowUi, person_id: &str, size: i32) -> gtk::Picture {
-    let picture = gtk::Picture::builder()
-        .width_request(size)
-        .height_request(size)
-        .can_shrink(true)
-        .content_fit(gtk::ContentFit::Cover)
-        .css_classes(["mimick-person-avatar"])
-        .build();
-    spawn_person_thumbnail(ui.ctx.clone(), person_id.to_string(), picture.clone());
-    picture
+fn avatar(ui: &LibraryWindowUi, person: &Person, size: i32) -> libadwaita::Avatar {
+    let avatar = libadwaita::Avatar::new(size, Some(&person.name), true);
+    let avatar_for_image = avatar.clone();
+    spawn_person_thumbnail(ui.ctx.clone(), person.id.clone(), move |texture| {
+        avatar_for_image.set_custom_image(Some(texture))
+    });
+    avatar
 }
 
 fn person_tile(ui: &Rc<LibraryWindowUi>, person: &Person) -> gtk::Overlay {
     let label = gtk::Label::builder()
         .label(display_name(person))
         .ellipsize(gtk::pango::EllipsizeMode::End)
-        .max_width_chars(10)
+        .max_width_chars(14)
         .build();
     if person.name.is_empty() {
         label.add_css_class("dim-label");
@@ -194,7 +191,7 @@ fn person_tile(ui: &Rc<LibraryWindowUi>, person: &Person) -> gtk::Overlay {
         .spacing(6)
         .halign(gtk::Align::Center)
         .build();
-    inner.append(&avatar(ui, &person.id, AVATAR_SIZE));
+    inner.append(&avatar(ui, person, AVATAR_SIZE));
     inner.append(&label);
     let open = gtk::Button::builder()
         .child(&inner)
@@ -210,8 +207,8 @@ fn person_tile(ui: &Rc<LibraryWindowUi>, person: &Person) -> gtk::Overlay {
         display_name(person).to_string(),
     );
     open.connect_clicked(move |_| {
-        super::controls::sidebar_dispatch(
-            ui_open.clone(),
+        super::navigation::navigate_source(
+            &ui_open,
             LibrarySource::Person {
                 id: id.clone(),
                 name: name.clone(),
@@ -231,7 +228,10 @@ fn person_tile(ui: &Rc<LibraryWindowUi>, person: &Person) -> gtk::Overlay {
     tile
 }
 
-fn person_menu_items(ui: &Rc<LibraryWindowUi>, person: &Person) -> Vec<(String, Box<dyn Fn()>)> {
+pub(super) fn person_menu_items(
+    ui: &Rc<LibraryWindowUi>,
+    person: &Person,
+) -> Vec<(String, Box<dyn Fn()>)> {
     let rename_label = if person.name.is_empty() {
         "Add Name…"
     } else {
@@ -285,6 +285,7 @@ fn save(ui: &Rc<LibraryWindowUi>, person_id: &str, update: PersonUpdate) {
             apply_update(person, &update);
         }
         render(&ui);
+        super::source_header::refresh(&ui);
     });
 }
 
@@ -380,6 +381,23 @@ fn parse_date(date: &str) -> Option<(i32, i32, i32)> {
 }
 
 fn present_merge_dialog(ui: &Rc<LibraryWindowUi>, target: &Person) {
+    if ui.people.people.borrow().is_empty() {
+        let (ui, target) = (ui.clone(), target.clone());
+        glib::MainContext::default().spawn_local(async move {
+            match ui.ctx.api_client.fetch_people(true).await {
+                Ok(people) => {
+                    *ui.people.people.borrow_mut() = people;
+                    present_merge_list(&ui, &target);
+                }
+                Err(err) => show_alert_dialog(&ui, "Could Not Load People", &err),
+            }
+        });
+        return;
+    }
+    present_merge_list(ui, target);
+}
+
+fn present_merge_list(ui: &Rc<LibraryWindowUi>, target: &Person) {
     let others: Vec<Person> = ui
         .people
         .people
@@ -494,7 +512,7 @@ fn merge_row(
         .use_markup(false)
         .activatable_widget(&check)
         .build();
-    row.add_prefix(&avatar(ui, &person.id, 40));
+    row.add_prefix(&avatar(ui, person, 40));
     row.add_suffix(&check);
     let (selected, merge, id) = (selected.clone(), merge.clone(), person.id.clone());
     check.connect_toggled(move |check| {
@@ -512,7 +530,10 @@ fn merge_row(
 fn merge_people(ui: Rc<LibraryWindowUi>, target_id: String, ids: Vec<String>) {
     glib::MainContext::default().spawn_local(async move {
         match ui.ctx.api_client.merge_people(&target_id, &ids).await {
-            Ok(()) => reload(ui),
+            Ok(()) => {
+                super::source_header::refresh(&ui);
+                reload(ui);
+            }
             Err(err) => show_alert_dialog(&ui, "Could Not Merge People", &err),
         }
     });

@@ -90,6 +90,10 @@ pub struct LibraryAlbum {
     /// ISO 8601 modification timestamp.
     #[serde(rename = "updatedAt")]
     pub updated_at: String,
+    #[serde(rename = "startDate", default)]
+    pub start_date: Option<String>,
+    #[serde(rename = "endDate", default)]
+    pub end_date: Option<String>,
     /// User description of the album.
     #[serde(default)]
     pub description: String,

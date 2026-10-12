@@ -23,7 +23,7 @@ use crate::library::local_source::{
 use crate::library::masonry::GridViewParts;
 use crate::library::search_view::SearchViewParts;
 use crate::library::sidebar::SidebarParts;
-use crate::library::state::{LibraryLoadState, LibrarySource};
+use crate::library::state::{LibraryLoadState, LibraryPage, LibrarySource, Location};
 use crate::state_manager::TransferDirection;
 
 use self::actions::{connect_bulk_actions, connect_select_mode};
@@ -31,7 +31,7 @@ use self::album_link::{connect_album_link_row, refresh_album_link_row};
 use self::context_menu::{AssetMenuHooks, show_asset_context_menu};
 use self::controls::{
     connect_controls, connect_grid_handlers, connect_sidebar_handlers,
-    refresh_library_after_mutation, sidebar_dispatch,
+    refresh_library_after_mutation,
 };
 use self::download::format_rate;
 use self::lightbox::open_lightbox;
@@ -65,6 +65,7 @@ mod dialogs;
 mod download;
 mod folders_view;
 mod lightbox;
+mod navigation;
 mod people_view;
 pub mod search_filters;
 pub mod search_view;
@@ -72,6 +73,7 @@ mod server_stats_dialog;
 mod shared_link_dialog;
 mod shared_links_view;
 mod sharing_view;
+mod source_header;
 pub mod staging_view;
 mod tags_view;
 mod trash_view;
@@ -118,6 +120,7 @@ struct LibraryWindowUi {
     tags: tags_view::TagsView,
     folders: folders_view::FoldersView,
     sharing: sharing_view::SharingView,
+    header: source_header::SourceHeader,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -232,6 +235,7 @@ fn bootstrap_window(ui: Rc<LibraryWindowUi>) {
     };
 
     apply_timeline_ui_state(&ui, &initial_request.1);
+    source_header::show(&ui, &initial_request.1);
     load_albums(ui.clone());
     load_status(ui.clone());
     fetch_current_user(ui.clone());
@@ -367,12 +371,7 @@ fn dispatch_search_from_view(ui: &Rc<LibraryWindowUi>) {
         return;
     };
 
-    let request = ui.ctx.library_state.lock().navigate_to(source);
-    apply_timeline_ui_state(ui, &request.1);
-    // The search form revealer stays visible -- results load into the
-    // grid below it so the user can see and edit their query.
-    ui.content_stack.set_visible_child_name("loading");
-    load_source_page(ui.clone(), request, false);
+    navigation::navigate_source(ui, source);
 }
 
 /// Decide which `LibrarySource` variant to use based on mode, query, and filters.
@@ -683,18 +682,13 @@ fn refresh_albums_view(ui: Rc<LibraryWindowUi>) {
             Ok(albums) => {
                 let on_click = album_click_handler(ui.clone());
                 populate_albums(&ui.albums, ui.ctx.clone(), albums, on_click);
-                if matches!(
-                    ui.content_stack.visible_child_name().as_deref(),
-                    Some("albums") | Some("loading")
-                ) {
+                if on_albums_page(&ui) {
                     ui.content_stack.set_visible_child_name("albums");
                 }
             }
             Err(err) => {
                 log::warn!("Albums fetch failed: {}", err);
-                if !ui.albums.populated.get()
-                    && ui.content_stack.visible_child_name().as_deref() == Some("loading")
-                {
+                if !ui.albums.populated.get() && on_albums_page(&ui) {
                     ui.error_label
                         .set_label(&format!("Could not load albums: {}", err));
                     ui.content_stack.set_visible_child_name("error");
@@ -704,11 +698,17 @@ fn refresh_albums_view(ui: Rc<LibraryWindowUi>) {
     });
 }
 
-/// Produce a click callback handler for handling album activation events.
+fn on_albums_page(ui: &LibraryWindowUi) -> bool {
+    matches!(
+        navigation::current(ui),
+        Location::Page(LibraryPage::Albums { .. })
+    )
+}
+
 fn album_click_handler(ui: Rc<LibraryWindowUi>) -> AlbumClick {
     Rc::new(move |id: &str, name: String| {
-        sidebar_dispatch(
-            ui.clone(),
+        navigation::navigate_source(
+            &ui,
             LibrarySource::Album {
                 id: id.to_string(),
                 name,
@@ -734,19 +734,12 @@ fn refresh_search_tags(ui: Rc<LibraryWindowUi>, select: Option<String>) {
     });
 }
 
-/// Show every asset carrying `tag`, with the search form open and its Tag filter set.
 fn search_by_tag(ui: Rc<LibraryWindowUi>, tag: Tag) {
-    search_view::clear_all_filters(&ui.search_view);
-    ui.search_view.root.set_reveal_child(true);
-    refresh_search_tags(ui.clone(), Some(tag.id.clone()));
-    let filters = MetadataSearchFilters {
-        tag_ids: Some(vec![tag.id]),
-        ..Default::default()
-    };
-    show_source(
+    navigation::navigate_source(
         &ui,
-        LibrarySource::AdvancedSearch {
-            filters: Box::new(filters),
+        LibrarySource::Tag {
+            id: tag.id,
+            name: tag.value,
         },
     );
 }
@@ -909,6 +902,14 @@ fn load_status(ui: Rc<LibraryWindowUi>) {
                 state.set_status(stats, about);
             }
             update_footer(&ui, route);
+            if matches!(
+                navigation::current(&ui),
+                Location::Source(
+                    LibrarySource::AllAssets | LibrarySource::Timeline | LibrarySource::Unified
+                )
+            ) {
+                source_header::refresh(&ui);
+            }
         }
     ));
 }
@@ -943,13 +944,6 @@ fn load_explore_landing(ui: Rc<LibraryWindowUi>) {
     load_explore_sections(ui);
 }
 
-/// Switch the grid to `source` and load its first page.
-fn show_source(ui: &Rc<LibraryWindowUi>, source: LibrarySource) {
-    let request = ui.ctx.library_state.lock().switch_source(source);
-    apply_timeline_ui_state(ui, &request.1);
-    load_source_page(ui.clone(), request, false);
-}
-
 /// The fetched value, or its default after telling the user if the API key lacks permission.
 fn unwrap_or_report_permission<T: Default>(ui: &LibraryWindowUi, result: Result<T, String>) -> T {
     if let Err(e) = &result
@@ -964,17 +958,8 @@ fn load_explore_people(ui: Rc<LibraryWindowUi>) {
     glib::MainContext::default().spawn_local(async move {
         let people = unwrap_or_report_permission(&ui, ui.ctx.api_client.fetch_people(false).await);
         let click_ui = ui.clone();
-        explore_view::populate_people(&ui.explore, ui.ctx.clone(), people, move |id, _name| {
-            let filters = MetadataSearchFilters {
-                person_ids: Some(vec![id]),
-                ..Default::default()
-            };
-            show_source(
-                &click_ui,
-                LibrarySource::AdvancedSearch {
-                    filters: Box::new(filters),
-                },
-            );
+        explore_view::populate_people(&ui.explore, ui.ctx.clone(), people, move |id, name| {
+            navigation::navigate_source(&click_ui, LibrarySource::Person { id, name });
         });
     });
 }
@@ -988,16 +973,7 @@ fn load_explore_places(ui: Rc<LibraryWindowUi>) {
             ui.ctx.clone(),
             places,
             move |_kind, value, _asset_id| {
-                let filters = MetadataSearchFilters {
-                    city: Some(value.clone()),
-                    ..Default::default()
-                };
-                show_source(
-                    &click_ui,
-                    LibrarySource::AdvancedSearch {
-                        filters: Box::new(filters),
-                    },
-                );
+                navigation::navigate_source(&click_ui, LibrarySource::Place { city: value });
             },
         );
     });
@@ -1016,12 +992,12 @@ fn load_explore_sections(ui: Rc<LibraryWindowUi>) {
                     open_asset_in_lightbox(click_ui.clone(), asset_id);
                     return;
                 }
-                show_source(
-                    &click_ui,
-                    LibrarySource::SmartSearch {
-                        query: value.clone(),
-                    },
-                );
+                let source = if kind == "place" {
+                    LibrarySource::Place { city: value }
+                } else {
+                    LibrarySource::Thing { query: value }
+                };
+                navigation::navigate_source(&click_ui, source);
             },
         );
     });
@@ -1087,8 +1063,9 @@ fn load_source_page(ui: Rc<LibraryWindowUi>, request: (u64, LibrarySource, u32),
         load_explore_landing(ui);
         return;
     }
-    if !append {
-        ui.content_stack.set_visible_child_name("loading");
+    if !append && !navigation::on_page(&ui) {
+        source_header::set_status(&ui, "loading", None);
+        ui.content_stack.set_visible_child_name("grid");
     }
     log::debug!("Loading library source {:?} page={}", request.1, request.2);
     glib::MainContext::default().spawn_local(clone!(
@@ -1129,33 +1106,12 @@ async fn fetch_remote_page(
     page: u32,
     order: Option<SortOrder>,
 ) -> PageResult {
+    if let Some(filters) = remote_filters(&source, order) {
+        return api
+            .search_metadata_with_filters(&filters, page, PAGE_SIZE)
+            .await;
+    }
     match source {
-        LibrarySource::AllAssets | LibrarySource::Timeline => {
-            api.search_metadata_with_filters(
-                &visibility_filters("timeline", order),
-                page,
-                PAGE_SIZE,
-            )
-            .await
-        }
-        LibrarySource::Person { id, .. } => {
-            let filters = MetadataSearchFilters {
-                order,
-                person_ids: Some(vec![id]),
-                ..MetadataSearchFilters::default()
-            };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
-        }
-        LibrarySource::Tag { id, .. } => {
-            let filters = MetadataSearchFilters {
-                order,
-                tag_ids: Some(vec![id]),
-                ..MetadataSearchFilters::default()
-            };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
-        }
         LibrarySource::Folder { path } => {
             if page > 1 {
                 return Ok((Vec::new(), false));
@@ -1164,50 +1120,54 @@ async fn fetch_remote_page(
             folders_view::sort_by_date(&mut assets, order);
             Ok((assets, false))
         }
-        LibrarySource::Archive => {
-            api.search_metadata_with_filters(&visibility_filters("archive", order), page, PAGE_SIZE)
-                .await
-        }
         LibrarySource::Album { id, .. } => {
             api.fetch_album_assets(&id, page, PAGE_SIZE, order).await
         }
-        LibrarySource::SmartSearch { query } => api.search_smart(&query, page, PAGE_SIZE).await,
+        LibrarySource::SmartSearch { query } | LibrarySource::Thing { query } => {
+            api.search_smart(&query, page, PAGE_SIZE).await
+        }
         LibrarySource::OcrSearch { query } => api.search_ocr(&query, page, PAGE_SIZE, order).await,
         LibrarySource::MetadataSearch { query } => {
             api.search_metadata(&query, page, PAGE_SIZE, order).await
-        }
-        LibrarySource::AdvancedSearch { filters } => {
-            let filters = MetadataSearchFilters { order, ..*filters };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
-        }
-        LibrarySource::Favorites => {
-            let filters = MetadataSearchFilters {
-                order,
-                is_favorite: Some(true),
-                ..MetadataSearchFilters::default()
-            };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
-        }
-        LibrarySource::Trash => {
-            let filters = MetadataSearchFilters {
-                order,
-                ..MetadataSearchFilters::trashed()
-            };
-            api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
-                .await
         }
         other => unreachable!("{other:?} is not a remote page source"),
     }
 }
 
-fn visibility_filters(visibility: &str, order: Option<SortOrder>) -> MetadataSearchFilters {
-    MetadataSearchFilters {
-        order,
-        visibility: Some(visibility.to_string()),
-        ..MetadataSearchFilters::default()
-    }
+fn remote_filters(
+    source: &LibrarySource,
+    order: Option<SortOrder>,
+) -> Option<MetadataSearchFilters> {
+    let base = match source {
+        LibrarySource::AllAssets | LibrarySource::Timeline => MetadataSearchFilters {
+            visibility: Some("timeline".to_string()),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::Archive => MetadataSearchFilters {
+            visibility: Some("archive".to_string()),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::Favorites => MetadataSearchFilters {
+            is_favorite: Some(true),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::Trash => MetadataSearchFilters::trashed(),
+        LibrarySource::Person { id, .. } => MetadataSearchFilters {
+            person_ids: Some(vec![id.clone()]),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::Tag { id, .. } => MetadataSearchFilters {
+            tag_ids: Some(vec![id.clone()]),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::Place { city } => MetadataSearchFilters {
+            city: Some(city.clone()),
+            ..MetadataSearchFilters::default()
+        },
+        LibrarySource::AdvancedSearch { filters } => (**filters).clone(),
+        _ => return None,
+    };
+    Some(MetadataSearchFilters { order, ..base })
 }
 
 /// Local enumeration is bounded, so local sources return everything as one page.
@@ -1248,7 +1208,7 @@ async fn fetch_unified_page(
         LibrarySource::Unified => {
             let remote = api
                 .search_metadata_with_filters(
-                    &visibility_filters("timeline", order),
+                    &remote_filters(&LibrarySource::Timeline, order).unwrap_or_default(),
                     page,
                     PAGE_SIZE,
                 )
@@ -1271,14 +1231,16 @@ fn apply_page_result(ui: &Rc<LibraryWindowUi>, generation: u64, append: bool, re
     let (items, has_more) = match result {
         Ok(page) => page,
         Err(err) => {
-            ui.ctx
-                .library_state
-                .lock()
-                .mark_error(generation, err.clone());
-            // Lock dropped before GTK calls (same pattern as the Ok path).
-            ui.error_label
-                .set_label(&format!("Could not load library assets: {}", err));
-            ui.content_stack.set_visible_child_name("error");
+            let current = {
+                let mut state = ui.ctx.library_state.lock();
+                state.mark_error(generation, err.clone());
+                state.generation == generation
+            };
+            if current && !append && !navigation::on_page(ui) {
+                let message = format!("Could not load library assets: {err}");
+                source_header::set_status(ui, "error", Some(&message));
+                ui.content_stack.set_visible_child_name("grid");
+            }
             return;
         }
     };
@@ -1380,97 +1342,30 @@ fn build_album_sidebar_row(
     row
 }
 
-/// Repopulate and select the active album or fixed row in the side navigation sidebar.
 fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
-    while let Some(row) = ui.sidebar.albums_list.first_child() {
-        ui.sidebar.albums_list.remove(&row);
-    }
-
-    let selected_source = ui.ctx.library_state.lock().source.clone();
     let albums = ui.ctx.library_state.lock().albums.clone();
     sidebar::set_recent_albums(&ui.sidebar, &albums);
-    for album in albums {
-        let row = build_album_sidebar_row(ui, &album);
-        ui.sidebar.albums_list.append(&row);
-    }
-    if controls::showing_page(ui) {
+    if sidebar::album_list_changed(&ui.sidebar, &albums) {
+        let had_focus = ui.sidebar.albums_list.focus_child().is_some();
+        ui.sidebar_suppressed.set(true);
+        while let Some(row) = ui.sidebar.albums_list.first_child() {
+            ui.sidebar.albums_list.remove(&row);
+        }
+        for album in &albums {
+            let row = build_album_sidebar_row(ui, album);
+            ui.sidebar.albums_list.append(&row);
+        }
+        ui.sidebar_suppressed.set(false);
+        navigation::sync_sidebar(ui);
+        if had_focus {
+            match ui.sidebar.albums_list.selected_row() {
+                Some(row) => row.grab_focus(),
+                None => ui.sidebar.fixed_list.grab_focus(),
+            };
+        }
         return;
     }
-
-    match selected_source {
-        LibrarySource::Timeline => {
-            select_fixed_row(&ui.sidebar.fixed_list, "photos");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Explore => {
-            select_fixed_row(&ui.sidebar.fixed_list, "explore");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Favorites => {
-            select_fixed_row(&ui.sidebar.fixed_list, "favorites");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Person { .. } => {
-            select_fixed_row(&ui.sidebar.fixed_list, "people");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Tag { .. } => {
-            select_fixed_row(&ui.sidebar.fixed_list, "tags");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Folder { .. } => {
-            select_fixed_row(&ui.sidebar.fixed_list, "folders");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Archive => {
-            select_fixed_row(&ui.sidebar.fixed_list, "archive");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Trash => {
-            select_fixed_row(&ui.sidebar.fixed_list, "trash");
-            ui.sidebar.albums_list.unselect_all();
-        }
-        LibrarySource::Album { id, .. }
-        | LibrarySource::AlbumLocal { id, .. }
-        | LibrarySource::AlbumUnified { id, .. } => {
-            ui.sidebar.fixed_list.unselect_all();
-            ui.sidebar_suppressed.set(true);
-            let mut child = ui.sidebar.albums_list.first_child();
-            while let Some(widget) = child {
-                let next = widget.next_sibling();
-                if let Ok(row) = widget.downcast::<gtk::ListBoxRow>()
-                    && row.tooltip_text().as_deref().is_some_and(|tooltip| {
-                        tooltip.split_once(':').map(|(prefix, _)| prefix) == Some(id.as_str())
-                    })
-                {
-                    ui.sidebar.albums_list.select_row(Some(&row));
-                    ui.sidebar_suppressed.set(false);
-                    break;
-                }
-                child = next;
-            }
-            ui.sidebar_suppressed.set(false);
-        }
-        _ => {
-            ui.sidebar.fixed_list.unselect_all();
-            ui.sidebar.albums_list.unselect_all();
-        }
-    }
-}
-
-/// Helper to select a sidebar row matching a specific string key.
-fn select_fixed_row(list: &gtk::ListBox, key: &str) {
-    let mut child = list.first_child();
-    while let Some(widget) = child {
-        let next = widget.next_sibling();
-        if let Ok(row) = widget.downcast::<gtk::ListBoxRow>()
-            && row.tooltip_text().as_deref() == Some(key)
-        {
-            list.select_row(Some(&row));
-            return;
-        }
-        child = next;
-    }
+    navigation::sync_sidebar(ui);
 }
 
 /// Sync the visibility of the grid, loading, empty, and error page widgets.
@@ -1481,19 +1376,30 @@ fn select_fixed_row(list: &gtk::ListBox, key: &str) {
 /// re-acquire the same lock.  Holding it across the call caused a
 /// parking_lot deadlock on first library open.
 fn sync_content_state(ui: &LibraryWindowUi) {
-    let (child_name, error_msg) = {
+    if navigation::on_page(ui) {
+        return;
+    }
+    let (status, error_msg, single_page_count) = {
         let state = ui.ctx.library_state.lock();
+        let single_page = matches!(
+            state.source,
+            LibrarySource::Folder { .. }
+                | LibrarySource::LocalAll
+                | LibrarySource::LocalSearch { .. }
+        );
+        let count = (single_page && !state.has_more).then_some(state.assets.len());
         match &state.load_state {
-            LibraryLoadState::Idle | LibraryLoadState::Loading => ("loading", None),
-            LibraryLoadState::Loaded => ("grid", None),
-            LibraryLoadState::Empty => ("empty", None),
-            LibraryLoadState::Error(msg) => ("error", Some(msg.clone())),
+            LibraryLoadState::Idle | LibraryLoadState::Loading => ("loading", None, None),
+            LibraryLoadState::Loaded => ("none", None, count),
+            LibraryLoadState::Empty => ("empty", None, count),
+            LibraryLoadState::Error(msg) => ("error", Some(msg.clone()), None),
         }
     };
-    if let Some(msg) = error_msg {
-        ui.error_label.set_label(&msg);
+    source_header::set_status(ui, status, error_msg.as_deref());
+    if let Some(count) = single_page_count {
+        source_header::set_loaded_count(ui, count);
     }
-    ui.content_stack.set_visible_child_name(child_name);
+    ui.content_stack.set_visible_child_name("grid");
 }
 
 /// Update the status sidebar rows with the current server route and statistics.

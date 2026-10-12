@@ -784,7 +784,9 @@ fn person_tile(
     };
     button.connect_clicked(move |_| on_click(id.clone(), name.clone()));
 
-    spawn_person_thumbnail(ctx, person.id.clone(), avatar);
+    spawn_person_thumbnail(ctx, person.id.clone(), move |texture| {
+        avatar.set_paintable(Some(texture))
+    });
     button
 }
 
@@ -867,7 +869,7 @@ fn spawn_asset_thumbnail(ctx: Arc<AppContext>, asset_id: String, picture: gtk::P
 pub(super) fn spawn_person_thumbnail(
     ctx: Arc<AppContext>,
     person_id: String,
-    picture: gtk::Picture,
+    on_loaded: impl FnOnce(&Texture) + 'static,
 ) {
     glib::timeout_add_local_once(std::time::Duration::from_millis(120), move || {
         glib::MainContext::default().spawn_local(async move {
@@ -882,7 +884,7 @@ pub(super) fn spawn_person_thumbnail(
             .ok()
             .flatten();
             if let Some(texture) = texture {
-                picture.set_paintable(Some(&texture));
+                on_loaded(&texture);
             }
         });
     });

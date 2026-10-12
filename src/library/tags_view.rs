@@ -10,7 +10,7 @@ use super::LibraryWindowUi;
 use super::asset_tags::color_dot;
 use super::context_menu::show_alert_dialog;
 use super::dialogs::{TextPrompt, confirm, popover_menu, prompt_text};
-use super::state::LibrarySource;
+use super::state::{LibraryPage, LibrarySource, Location};
 use super::tree_page::{
     TreePage, build_tree_page, parent_path, render_breadcrumbs, show_empty_state,
 };
@@ -49,8 +49,10 @@ pub(super) fn connect_tags_view(ui: Rc<LibraryWindowUi>) {
         .connect_clicked(move |_| create_tag(&ui_new));
 }
 
-pub(super) fn show(ui: &Rc<LibraryWindowUi>) {
+pub(super) fn show(ui: &Rc<LibraryWindowUi>, path: Option<String>) {
+    *ui.tags.path.borrow_mut() = path;
     ui.content_stack.set_visible_child_name("tags");
+    render(ui);
     reload(ui.clone());
 }
 
@@ -71,8 +73,7 @@ fn reload(ui: Rc<LibraryWindowUi>) {
 }
 
 fn open_path(ui: &Rc<LibraryWindowUi>, path: Option<String>) {
-    *ui.tags.path.borrow_mut() = path;
-    render(ui);
+    super::navigation::navigate(ui, Location::Page(LibraryPage::Tags { path }));
 }
 
 fn render(ui: &Rc<LibraryWindowUi>) {
@@ -145,8 +146,8 @@ fn tag_row(ui: &Rc<LibraryWindowUi>, tag: &Tag, children: usize) -> libadwaita::
     }
     let (ui_open, id, value) = (ui.clone(), tag.id.clone(), tag.value.clone());
     row.connect_activated(move |_| {
-        super::controls::sidebar_dispatch(
-            ui_open.clone(),
+        super::navigation::navigate_source(
+            &ui_open,
             LibrarySource::Tag {
                 id: id.clone(),
                 name: value.clone(),
@@ -156,7 +157,7 @@ fn tag_row(ui: &Rc<LibraryWindowUi>, tag: &Tag, children: usize) -> libadwaita::
     row
 }
 
-fn tag_menu_items(ui: &Rc<LibraryWindowUi>, tag: &Tag) -> Vec<(String, Box<dyn Fn()>)> {
+pub(super) fn tag_menu_items(ui: &Rc<LibraryWindowUi>, tag: &Tag) -> Vec<(String, Box<dyn Fn()>)> {
     let (ui_rename, t_rename) = (ui.clone(), tag.clone());
     let (ui_color, t_color) = (ui.clone(), tag.clone());
     let (ui_delete, t_delete) = (ui.clone(), tag.clone());
@@ -184,7 +185,10 @@ fn run(
     let ui = ui.clone();
     glib::MainContext::default().spawn_local(async move {
         match task.await {
-            Ok(()) => reload(ui),
+            Ok(()) => {
+                super::source_header::refresh(&ui);
+                reload(ui);
+            }
             Err(err) => show_alert_dialog(&ui, heading, &err),
         }
     });
@@ -256,8 +260,17 @@ fn delete_tag(ui: &Rc<LibraryWindowUi>, tag: &Tag) {
         "Delete",
         move || {
             let (api, tag_id) = (ui_delete.ctx.api_client.clone(), tag_id.clone());
+            let ui_after = ui_delete.clone();
             run(&ui_delete, "Could Not Delete Tag", async move {
-                api.delete_tag(&tag_id).await
+                api.delete_tag(&tag_id).await?;
+                let viewing = matches!(
+                    super::navigation::current(&ui_after),
+                    Location::Source(LibrarySource::Tag { id, .. }) if id == tag_id
+                );
+                if viewing {
+                    super::navigation::go_back(&ui_after);
+                }
+                Ok(())
             });
         },
     );

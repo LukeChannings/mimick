@@ -117,6 +117,7 @@ Each watched directory operates with isolated logical constraints:
 - **Tags page:** Browse the tag tree from the sidebar, open a tag's photos, and create, rename, recolor, or delete tags.
 - **Folders:** Browse server photos by the folder they were uploaded from.
 - **Partner Sharing:** Share your whole library with another user, or stop sharing, from the **Sharing** sidebar page.
+- **View Headers:** Every photo view opens with a title header showing counts, dates, sharing, ages, and the view's actions, and **Back** returns to wherever you were, pages included.
 - **Archive:** Archive photos to hide them from the Photos timeline (right-click, lightbox button or **A**, or the selection bar); the **Archive** sidebar entry lists them.
 - **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
 - **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).

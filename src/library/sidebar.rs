@@ -5,7 +5,6 @@
 //! album list. Handles selection changes to drive the main grid view source.
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use gtk::prelude::*;
 use libadwaita::prelude::*;
@@ -23,7 +22,8 @@ pub struct SidebarParts {
     pub fixed_list: gtk::ListBox,
     pub albums_list: gtk::ListBox,
     recent_expander: gtk::ToggleButton,
-    recent_rows: Rc<RefCell<Vec<gtk::ListBoxRow>>>,
+    recent_rows: Vec<libadwaita::ActionRow>,
+    album_signature: RefCell<Vec<(String, String, u32)>>,
 }
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
@@ -161,13 +161,18 @@ pub fn build_sidebar() -> SidebarParts {
         .css_classes(["flat", "circular"])
         .visible(false)
         .build();
-    let recent_rows: Rc<RefCell<Vec<gtk::ListBoxRow>>> = Rc::default();
+    let recent_rows: Vec<libadwaita::ActionRow> = (0..RECENT_ALBUM_COUNT)
+        .map(|_| recent_album_row())
+        .collect();
     for (title, subtitle, icon, key) in FIXED_ROWS {
         let row = action_row(title, subtitle, icon, key);
+        fixed_list.append(&row);
         if key == "albums" {
             row.add_suffix(&recent_expander);
+            for recent in &recent_rows {
+                fixed_list.append(recent);
+            }
         }
-        fixed_list.append(&row);
     }
     let rows = recent_rows.clone();
     recent_expander.connect_toggled(move |button| {
@@ -182,8 +187,8 @@ pub fn build_sidebar() -> SidebarParts {
         } else {
             "Show recent albums"
         }));
-        for row in rows.borrow().iter() {
-            row.set_visible(expanded);
+        for row in &rows {
+            row.set_visible(expanded && recent_album_key(row.upcast_ref()).is_some());
         }
     });
 
@@ -227,37 +232,66 @@ pub fn build_sidebar() -> SidebarParts {
         albums_list,
         recent_expander,
         recent_rows,
+        album_signature: RefCell::default(),
     }
 }
 
+pub fn album_list_changed(parts: &SidebarParts, albums: &[LibraryAlbum]) -> bool {
+    let signature: Vec<(String, String, u32)> = albums
+        .iter()
+        .map(|album| {
+            (
+                album.id.clone(),
+                album.album_name.clone(),
+                album.asset_count,
+            )
+        })
+        .collect();
+    let mut previous = parts.album_signature.borrow_mut();
+    if *previous == signature {
+        return false;
+    }
+    *previous = signature;
+    true
+}
+
 pub fn set_recent_albums(parts: &SidebarParts, albums: &[LibraryAlbum]) {
-    let mut rows = parts.recent_rows.borrow_mut();
-    for row in rows.drain(..) {
-        parts.fixed_list.remove(&row);
-    }
-    let Some(position) = fixed_row_index("albums") else {
-        return;
-    };
+    let recent = recent_albums(albums);
     let expanded = parts.recent_expander.is_active();
-    for (offset, album) in recent_albums(albums).into_iter().enumerate() {
-        let row = recent_album_row(album);
-        row.set_visible(expanded);
-        parts
-            .fixed_list
-            .insert(&row, (position + 1 + offset) as i32);
-        rows.push(row);
+    for (index, row) in parts.recent_rows.iter().enumerate() {
+        match recent.get(index) {
+            Some(album) => {
+                row.set_title(&album.album_name);
+                row.set_widget_name(&format!(
+                    "{RECENT_ALBUM_PREFIX}{}:{}",
+                    album.id, album.album_name
+                ));
+                row.set_visible(expanded);
+            }
+            None => {
+                row.set_widget_name("");
+                row.set_visible(false);
+            }
+        }
     }
-    parts.recent_expander.set_visible(!rows.is_empty());
+    parts.recent_expander.set_visible(!recent.is_empty());
+}
+
+pub fn recent_row_for_album(parts: &SidebarParts, album_id: &str) -> Option<gtk::ListBoxRow> {
+    parts
+        .recent_rows
+        .iter()
+        .find(|row| {
+            row.is_visible()
+                && recent_album_key(row.upcast_ref()).is_some_and(|(id, _)| id == album_id)
+        })
+        .map(|row| row.clone().upcast())
 }
 
 pub fn recent_album_key(row: &gtk::ListBoxRow) -> Option<(String, String)> {
     let name = row.widget_name();
     let (id, album_name) = name.strip_prefix(RECENT_ALBUM_PREFIX)?.split_once(':')?;
     Some((id.to_string(), album_name.to_string()))
-}
-
-fn fixed_row_index(key: &str) -> Option<usize> {
-    FIXED_ROWS.iter().position(|(_, _, _, k)| *k == key)
 }
 
 fn recent_albums(albums: &[LibraryAlbum]) -> Vec<&LibraryAlbum> {
@@ -267,16 +301,12 @@ fn recent_albums(albums: &[LibraryAlbum]) -> Vec<&LibraryAlbum> {
     recent
 }
 
-fn recent_album_row(album: &LibraryAlbum) -> gtk::ListBoxRow {
+fn recent_album_row() -> libadwaita::ActionRow {
     let row = libadwaita::ActionRow::builder()
-        .title(&album.album_name)
         .use_markup(false)
         .title_lines(1)
         .activatable(true)
-        .name(format!(
-            "{RECENT_ALBUM_PREFIX}{}:{}",
-            album.id, album.album_name
-        ))
+        .visible(false)
         .build();
     let icon = gtk::Image::builder()
         .icon_name("folder-pictures-symbolic")
@@ -284,7 +314,7 @@ fn recent_album_row(album: &LibraryAlbum) -> gtk::ListBoxRow {
         .css_classes(["dim-label"])
         .build();
     row.add_prefix(&icon);
-    row.upcast()
+    row
 }
 
 /// Construct a navigation list row decorated with an icon and titles.
@@ -331,11 +361,5 @@ mod tests {
             .map(|a| a.id.as_str())
             .collect();
         assert_eq!(ids, ["d", "b", "c"]);
-    }
-
-    #[test]
-    fn albums_row_has_a_fixed_index() {
-        assert_eq!(fixed_row_index("albums"), Some(4));
-        assert_eq!(fixed_row_index("missing"), None);
     }
 }

@@ -8,7 +8,7 @@ use crate::api_client::{LibraryAsset, SortOrder};
 
 use super::LibraryWindowUi;
 use super::context_menu::show_alert_dialog;
-use super::state::LibrarySource;
+use super::state::{LibraryPage, LibrarySource, Location};
 use super::tree_page::{
     TreePage, build_tree_page, leaf_name, parent_path, render_breadcrumbs, show_empty_state,
 };
@@ -31,8 +31,10 @@ pub(super) fn build_folders_view() -> FoldersView {
     }
 }
 
-pub(super) fn show(ui: &Rc<LibraryWindowUi>) {
+pub(super) fn show(ui: &Rc<LibraryWindowUi>, path: Option<String>) {
+    *ui.folders.path.borrow_mut() = path;
     ui.content_stack.set_visible_child_name("folders");
+    render(ui);
     reload(ui.clone());
 }
 
@@ -43,9 +45,13 @@ fn reload(ui: Rc<LibraryWindowUi>) {
                 let view = &ui.folders;
                 *view.folders.borrow_mut() = all_folders(&paths);
                 *view.asset_folders.borrow_mut() = paths.into_iter().collect();
-                if !view.opened.replace(true) {
+                if !view.opened.replace(true) && view.path.borrow().is_none() {
                     let start = start_path(&view.folders.borrow(), &view.asset_folders.borrow());
-                    *view.path.borrow_mut() = start;
+                    *view.path.borrow_mut() = start.clone();
+                    let mut state = ui.ctx.library_state.lock();
+                    if state.location == Location::Page(LibraryPage::Folders { path: None }) {
+                        state.location = Location::Page(LibraryPage::Folders { path: start });
+                    }
                 }
                 render(&ui);
             }
@@ -59,13 +65,12 @@ fn reload(ui: Rc<LibraryWindowUi>) {
 }
 
 fn open_path(ui: &Rc<LibraryWindowUi>, path: Option<String>) {
-    *ui.folders.path.borrow_mut() = path;
-    render(ui);
+    super::navigation::navigate(ui, Location::Page(LibraryPage::Folders { path }));
 }
 
 fn open_photos(ui: &Rc<LibraryWindowUi>, path: &str) {
-    super::controls::sidebar_dispatch(
-        ui.clone(),
+    super::navigation::navigate_source(
+        ui,
         LibrarySource::Folder {
             path: path.to_string(),
         },

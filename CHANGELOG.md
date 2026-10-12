@@ -23,11 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Tags sidebar page: browse the tag tree, open a tag's photos, and create, rename, recolor, or delete tags. Renaming needs a newer Immich than v3.0.0; older servers show an error (#237).
 - Added a Folders sidebar page to browse server photos by their original folder (#238).
 - Added a Sharing sidebar page for partner sharing: see who you share your library with and who shares with you, add partners, or stop sharing (#236).
+- Added a header to every photo view: albums show their item count, dates, sharing, description, share and folder-link actions; people show their face, photo count, age, and person menu; tags, places, folders, favorites, archive, and searches show their counts and details. The header scrolls away with the photos.
+- Added mouse back-button support in the library window.
 - Added a server About dialog (server row in the library sidebar) with Immich and component versions, source and build links, and version history.
 
 ### Changed
 
 - Archived photos no longer appear in the Photos timeline, matching Immich (#239).
+- Back now returns to pages too (Albums, People, Explore, Tags and Folders levels, Search), and people, places, and things opened from Explore, and tags clicked in the lightbox, open as titled views instead of anonymous searches.
+- The album linked-folder row and the Trash's Restore All / Empty Trash bar moved into the view header.
 - Bumped Flatpak runtime and CI builder image to GNOME 51.
 - Updated GitHub Actions dependencies (`taiki-e/install-action`, `github/codeql-action`).
 - Redesigned tags in the details pane as colored pill chips with an inline remove button, a "+" header button, and an empty state.

@@ -1,4 +1,9 @@
-use super::ImmichApiClient;
+use super::{ImmichApiClient, Person};
+
+#[derive(Debug, serde::Deserialize)]
+struct PersonStatistics {
+    assets: u64,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +27,19 @@ impl ImmichApiClient {
         self.send_json(reqwest::Method::PUT, &path, Some(body))
             .await
             .map(|_| ())
+    }
+
+    pub async fn fetch_person(&self, person_id: &str) -> Result<Person, String> {
+        let path = format!("/api/people/{person_id}");
+        let resp = self.send_json(reqwest::Method::GET, &path, None).await?;
+        resp.json().await.map_err(|err| err.to_string())
+    }
+
+    pub async fn person_asset_count(&self, person_id: &str) -> Result<u64, String> {
+        let path = format!("/api/people/{person_id}/statistics");
+        let resp = self.send_json(reqwest::Method::GET, &path, None).await?;
+        let stats: PersonStatistics = resp.json().await.map_err(|err| err.to_string())?;
+        Ok(stats.assets)
     }
 
     pub async fn merge_people(&self, into_id: &str, merge_ids: &[String]) -> Result<(), String> {

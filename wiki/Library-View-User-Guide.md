@@ -38,6 +38,16 @@ The window uses a sidebar + content split.
 - **All Albums** lists every album for quick navigation; click its heading to collapse it
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
 
+**View header:** every photo view opens with a header that scrolls away with the photos. It shows the view's title and, where Immich has them, details and actions:
+
+- **Albums**: item count, date range, who it's shared with or by, description, Share and Create share link buttons, and the linked-folder row with **Link folder** / **Sync**
+- **People**: face, name, photo count, age and birthday, and the person's **⋯** menu (Rename, Set Birthday, Hide, Merge People)
+- **Tags**: color, photo count, parent tags, and the tag's **⋯** menu
+- **Places**, **Folders**, **Favorites**, **Archive**, and searches: the item count where Immich can count it; folders also show their full path
+- **Trash**: the retention note with **Restore All** and **Empty Trash**
+
+**Back:** the header's back button, **Alt+Left**, or the mouse back button returns to the previous view, including pages such as Albums, People, Explore, and each level inside Tags and Folders. In the lightbox, the mouse back button closes it.
+
 **Header bar controls (right side):**
 
 - source selector dropdown (**Remote / Local / Unified**)
@@ -258,7 +268,7 @@ Server assets show a **Tags** section in the details pane:
 
 ## Album Sync (Bidirectional)
 
-When viewing an album, a footer row shows the linked local watch folder (if any) and two action buttons.
+When viewing an album, its header shows the linked local watch folder (if any) and two action buttons.
 
 | Button | Action |
 | :--- | :--- |
@@ -377,7 +387,7 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 
 The **Trash** sidebar entry lists everything in the Immich trash in the normal grid.
 
-- **Restore All** and **Empty Trash** sit in a bar above the grid. Emptying asks for confirmation and can't be undone.
+- **Restore All** and **Empty Trash** sit in the Trash header. Emptying asks for confirmation and can't be undone.
 - Select assets to **Restore** them or **Delete Permanently** from the selection bar. **Delete** with a selection also deletes permanently, after confirmation.
 - Right-click an asset (in the grid or the lightbox) for **Restore** and **Delete Permanently**.
 - Immich deletes trashed assets for good after its retention period (30 days by default, configurable on the server).
@@ -395,3 +405,4 @@ The **Trash** sidebar entry lists everything in the Immich trash in the normal g
 | **Delete** | Move the selection (grid) or the current asset (lightbox) to the trash; in the Trash view, delete permanently |
 | **F** | Toggle favorite for the current asset (lightbox) |
 | **A** | Archive or unarchive the current asset (lightbox) |
+| **Alt+Left** / mouse back | Go back to the previous view (mouse back also closes the lightbox) |
