@@ -30,7 +30,8 @@ The window uses a sidebar + content split.
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
 - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
-- album entries listed below for quick navigation
+- the arrow on **Albums** expands your three most recently updated albums
+- **All Albums** lists every album for quick navigation; click its heading to collapse it
 - Bottom footer contains the connection row (clicking it opens the **Server Statistics** dialog) and the server row (clicking it opens **About**: Immich and component versions, source/build links, and the server's version history)
 
 **Header bar controls (right side):**

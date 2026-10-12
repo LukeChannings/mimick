@@ -311,8 +311,14 @@ pub(super) fn connect_sidebar_handlers(ui: Rc<LibraryWindowUi>) {
             let Some(row) = row else {
                 return;
             };
-            let key = row.tooltip_text().unwrap_or_default();
             ui.sidebar.albums_list.unselect_all();
+            if let Some((id, name)) = super::sidebar::recent_album_key(row) {
+                ui.search_view.root.set_reveal_child(false);
+                sidebar_dispatch(ui.clone(), LibrarySource::Album { id, name });
+                auto_hide_sidebar(&ui);
+                return;
+            }
+            let key = row.tooltip_text().unwrap_or_default();
             let is_search = key.as_str() == "search";
             // Show/hide the search form revealer.
             ui.search_view.root.set_reveal_child(is_search);

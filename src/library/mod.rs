@@ -1349,6 +1349,7 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
 
     let selected_source = ui.ctx.library_state.lock().source.clone();
     let albums = ui.ctx.library_state.lock().albums.clone();
+    sidebar::set_recent_albums(&ui.sidebar, &albums);
     for album in albums {
         let row = build_album_sidebar_row(ui, &album);
         ui.sidebar.albums_list.append(&row);
