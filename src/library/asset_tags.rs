@@ -105,7 +105,13 @@ impl TagSection {
         self.chips.remove_all();
         let tags = self.tags.borrow();
         for tag in tags.iter() {
-            self.chips.insert(&self.chip(tag), -1);
+            let slot = gtk::FlowBoxChild::builder()
+                .child(&self.chip(tag))
+                .halign(gtk::Align::Start)
+                .focusable(false)
+                .css_classes(["mimick-tag-slot"])
+                .build();
+            self.chips.insert(&slot, -1);
         }
         self.chips.set_visible(!tags.is_empty());
         self.empty_label.set_visible(tags.is_empty());

@@ -269,6 +269,14 @@ picture.mimick-person-avatar:active {
 
 /* Tag pills in the details pane: a split chip. The left half (color dot + name)
    searches the tag; the right half is a full-height 32 px remove target. */
+flowboxchild.mimick-tag-slot,
+flowboxchild.mimick-tag-slot:hover,
+flowboxchild.mimick-tag-slot:focus {
+    padding: 0;
+    background: none;
+    outline: none;
+}
+
 box.mimick-tag-chip {
     border-radius: 999px;
     background-color: alpha(@accent_bg_color, 0.14);
