@@ -11,6 +11,9 @@ use super::asset_tags::color_dot;
 use super::context_menu::show_alert_dialog;
 use super::dialogs::{TextPrompt, confirm, popover_menu, prompt_text};
 use super::state::LibrarySource;
+use super::tree_page::{
+    TreePage, build_tree_page, parent_path, render_breadcrumbs, show_empty_state,
+};
 
 const PRESET_COLORS: [&str; 10] = [
     "#e11d48", "#f97316", "#eab308", "#22c55e", "#14b8a6", "#0ea5e9", "#6366f1", "#a855f7",
@@ -18,80 +21,22 @@ const PRESET_COLORS: [&str; 10] = [
 ];
 
 pub(super) struct TagsView {
-    pub root: gtk::Box,
-    breadcrumbs: gtk::Box,
-    breadcrumb_scroller: gtk::ScrolledWindow,
+    pub page: TreePage,
     new_tag: gtk::Button,
-    list: gtk::ListBox,
-    empty: libadwaita::StatusPage,
     tags: RefCell<Vec<Tag>>,
     path: RefCell<Option<String>>,
 }
 
 pub(super) fn build_tags_view() -> TagsView {
-    let breadcrumbs = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(2)
-        .build();
-    let breadcrumb_scroller = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::External)
-        .vscrollbar_policy(gtk::PolicyType::Never)
-        .hexpand(true)
-        .child(&breadcrumbs)
-        .build();
+    let page = build_tree_page("mimick-tag-symbolic");
     let new_tag = gtk::Button::builder()
         .icon_name("list-add-symbolic")
         .tooltip_text("New tag")
         .build();
-    let toolbar = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
-        .margin_top(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
-    toolbar.append(&breadcrumb_scroller);
-    toolbar.append(&new_tag);
-    let list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(["boxed-list"])
-        .valign(gtk::Align::Start)
-        .build();
-    let empty = libadwaita::StatusPage::builder()
-        .icon_name("mimick-tag-symbolic")
-        .vexpand(true)
-        .visible(false)
-        .build();
-    let content = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .margin_top(12)
-        .margin_bottom(12)
-        .margin_start(12)
-        .margin_end(12)
-        .build();
-    content.append(&list);
-    content.append(&empty);
-    let clamp = libadwaita::Clamp::builder()
-        .maximum_size(820)
-        .child(&content)
-        .build();
-    let scroller = gtk::ScrolledWindow::builder()
-        .hscrollbar_policy(gtk::PolicyType::Never)
-        .vexpand(true)
-        .child(&clamp)
-        .build();
-    let root = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .build();
-    root.append(&toolbar);
-    root.append(&scroller);
+    page.toolbar.append(&new_tag);
     TagsView {
-        root,
-        breadcrumbs,
-        breadcrumb_scroller,
+        page,
         new_tag,
-        list,
-        empty,
         tags: RefCell::default(),
         path: RefCell::default(),
     }
@@ -139,55 +84,29 @@ fn render(ui: &Rc<LibraryWindowUi>) {
         .clone()
         .filter(|path| tags.iter().any(|tag| &tag.value == path));
     *view.path.borrow_mut() = path.clone();
-    render_breadcrumbs(ui, path.as_deref());
+    let ui_crumb = ui.clone();
+    render_breadcrumbs(
+        &view.page,
+        "All Tags",
+        path.as_deref(),
+        Rc::new(move |target| open_path(&ui_crumb, target)),
+    );
 
-    view.list.remove_all();
+    view.page.list.remove_all();
     let children = children_of(&tags, path.as_deref());
     for tag in &children {
-        view.list
+        view.page
+            .list
             .append(&tag_row(ui, tag, child_count(&tags, &tag.value)));
     }
-    let (title, description) = match &path {
+    let empty = match &path {
         None => (
             "No Tags",
             "Create a tag with the + button, or tag photos from the lightbox details pane.",
         ),
         Some(_) => ("No Tags Inside", "Use the + button to add one here."),
     };
-    view.empty.set_title(title);
-    view.empty.set_description(Some(description));
-    view.empty.set_visible(children.is_empty());
-    view.list.set_visible(!children.is_empty());
-}
-
-fn render_breadcrumbs(ui: &Rc<LibraryWindowUi>, path: Option<&str>) {
-    let view = &ui.tags;
-    while let Some(child) = view.breadcrumbs.first_child() {
-        view.breadcrumbs.remove(&child);
-    }
-    let crumbs = breadcrumbs(path);
-    let last = crumbs.len() - 1;
-    for (index, (label, target)) in crumbs.into_iter().enumerate() {
-        if index > 0 {
-            let separator = gtk::Label::builder()
-                .label("/")
-                .css_classes(["dim-label"])
-                .build();
-            view.breadcrumbs.append(&separator);
-        }
-        let button = gtk::Button::builder()
-            .label(&label)
-            .css_classes(["flat"])
-            .build();
-        if index == last {
-            button.add_css_class("heading");
-        }
-        let ui = ui.clone();
-        button.connect_clicked(move |_| open_path(&ui, target.clone()));
-        view.breadcrumbs.append(&button);
-    }
-    let adjustment = view.breadcrumb_scroller.hadjustment();
-    glib::idle_add_local_once(move || adjustment.set_value(adjustment.upper()));
+    show_empty_state(&view.page, children.is_empty().then_some(empty));
 }
 
 fn tag_row(ui: &Rc<LibraryWindowUi>, tag: &Tag, children: usize) -> libadwaita::ActionRow {
@@ -446,10 +365,6 @@ fn rgba_hex(rgba: &gtk::gdk::RGBA) -> String {
     )
 }
 
-fn parent_path(value: &str) -> Option<&str> {
-    value.rsplit_once('/').map(|(parent, _)| parent)
-}
-
 fn children_of<'a>(tags: &'a [Tag], parent: Option<&str>) -> Vec<&'a Tag> {
     tags.iter()
         .filter(|tag| parent_path(&tag.value) == parent)
@@ -460,21 +375,6 @@ fn child_count(tags: &[Tag], value: &str) -> usize {
     tags.iter()
         .filter(|tag| parent_path(&tag.value) == Some(value))
         .count()
-}
-
-fn breadcrumbs(path: Option<&str>) -> Vec<(String, Option<String>)> {
-    let mut crumbs = vec![("All Tags".to_string(), None)];
-    if let Some(path) = path {
-        let mut prefix = String::new();
-        for segment in path.split('/') {
-            if !prefix.is_empty() {
-                prefix.push('/');
-            }
-            prefix.push_str(segment);
-            crumbs.push((segment.to_string(), Some(prefix.clone())));
-        }
-    }
-    crumbs
 }
 
 #[cfg(test)]
@@ -503,19 +403,6 @@ mod tests {
         assert_eq!(values(children_of(&tags, Some("Trips"))), ["Trips/Japan"]);
         assert_eq!(child_count(&tags, "Trips"), 1);
         assert_eq!(child_count(&tags, "Food"), 0);
-    }
-
-    #[test]
-    fn breadcrumbs_build_each_ancestor_path() {
-        assert_eq!(breadcrumbs(None), [("All Tags".to_string(), None)]);
-        assert_eq!(
-            breadcrumbs(Some("Trips/Japan")),
-            [
-                ("All Tags".to_string(), None),
-                ("Trips".to_string(), Some("Trips".to_string())),
-                ("Japan".to_string(), Some("Trips/Japan".to_string())),
-            ]
-        );
     }
 
     #[test]

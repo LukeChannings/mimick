@@ -115,6 +115,7 @@ Each watched directory operates with isolated logical constraints:
 - **Server About:** Click the server row in the library sidebar for the Immich version, component versions (ExifTool, Node.js, FFmpeg, …), source/build links, and the server's version history.
 - **People:** Browse everyone Immich has recognized, open their photos, and rename, hide, set a birthday, or merge people.
 - **Tags page:** Browse the tag tree from the sidebar, open a tag's photos, and create, rename, recolor, or delete tags.
+- **Folders:** Browse server photos by the folder they were uploaded from.
 - **Archive:** Archive photos to hide them from the Photos timeline (right-click, lightbox button or **A**, or the selection bar); the **Archive** sidebar entry lists them.
 - **Trash:** Browse the Immich trash, restore or permanently delete items, or empty it.
 - **Optional Toggle:** Toggle via **Settings → Behavior → Enable Library View** (restart required).

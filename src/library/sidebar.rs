@@ -27,7 +27,7 @@ pub struct SidebarParts {
 }
 
 /// Fixed sidebar destinations: title, subtitle, icon, and the key the sidebar handler matches.
-const FIXED_ROWS: [(&str, &str, &str, &str); 11] = [
+const FIXED_ROWS: [(&str, &str, &str, &str); 12] = [
     (
         "Photos",
         "Timeline of every photo and video",
@@ -81,6 +81,12 @@ const FIXED_ROWS: [(&str, &str, &str, &str); 11] = [
         "Browse and organize tags",
         "mimick-tag-symbolic",
         "tags",
+    ),
+    (
+        "Folders",
+        "Browse by folder on the server",
+        "folder-symbolic",
+        "folders",
     ),
     (
         "Archive",

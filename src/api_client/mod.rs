@@ -14,6 +14,7 @@ use tokio::sync::{Mutex, Semaphore};
 
 mod albums;
 mod errors;
+mod folders;
 mod library;
 mod people;
 pub use people::PersonUpdate;

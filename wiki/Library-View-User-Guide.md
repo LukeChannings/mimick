@@ -30,6 +30,7 @@ The window uses a sidebar + content split.
 - **Shared Links** — every public link you've created (see [Shared Links](#shared-links))
 - **People** — everyone Immich has recognized (see [People](#people))
 - **Tags** — your tag tree (see [Tags page](#tags-page))
+- **Folders** — server photos by their original folder (see [Folders](#folders))
 - **Archive** — archived assets, hidden from Photos (see [Archive](#archive))
 - **Trash** — assets in the Immich trash, which you can restore or delete permanently (see [Trash](#trash))
 - the arrow on **Albums** expands your three most recently updated albums
@@ -345,6 +346,13 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 - **+** creates a tag at the current level.
 - Each tag's **⋯** menu has **Rename…**, **Change Color…** (a preset or a custom color), and **Delete…**.
 - Renaming tags needs a newer Immich than v3.0.0; older servers show an error instead.
+
+---
+
+## Folders
+
+- The **Folders** sidebar entry shows the folders your photos came from on the server. It opens at the first level that has more than one folder; the path at the top takes you back up.
+- Click a folder to open it. A folder without subfolders opens its photos directly; otherwise **Photos in …** at the top of the list shows the photos in that folder itself.
 
 ---
 

@@ -68,6 +68,9 @@ pub enum LibrarySource {
         id: String,
         name: String,
     },
+    Folder {
+        path: String,
+    },
 }
 
 impl LibrarySource {

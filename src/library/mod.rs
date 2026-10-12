@@ -63,6 +63,7 @@ mod context_menu;
 mod controls;
 mod dialogs;
 mod download;
+mod folders_view;
 mod lightbox;
 mod people_view;
 pub mod search_filters;
@@ -73,6 +74,7 @@ mod shared_links_view;
 pub mod staging_view;
 mod tags_view;
 mod trash_view;
+mod tree_page;
 mod upload_picker;
 mod window_layout;
 
@@ -113,6 +115,7 @@ struct LibraryWindowUi {
     shared_links: shared_links_view::SharedLinksView,
     people: people_view::PeopleView,
     tags: tags_view::TagsView,
+    folders: folders_view::FoldersView,
     content_stack: gtk::Stack,
     error_label: gtk::Label,
     transfer_bar: gtk::Box,
@@ -1150,6 +1153,14 @@ async fn fetch_remote_page(
             api.search_metadata_with_filters(&filters, page, PAGE_SIZE)
                 .await
         }
+        LibrarySource::Folder { path } => {
+            if page > 1 {
+                return Ok((Vec::new(), false));
+            }
+            let mut assets = api.fetch_folder_assets(&path).await?;
+            folders_view::sort_by_date(&mut assets, order);
+            Ok((assets, false))
+        }
         LibrarySource::Archive => {
             api.search_metadata_with_filters(&visibility_filters("archive", order), page, PAGE_SIZE)
                 .await
@@ -1399,6 +1410,10 @@ fn reload_sidebar(ui: &Rc<LibraryWindowUi>) {
         }
         LibrarySource::Tag { .. } => {
             select_fixed_row(&ui.sidebar.fixed_list, "tags");
+            ui.sidebar.albums_list.unselect_all();
+        }
+        LibrarySource::Folder { .. } => {
+            select_fixed_row(&ui.sidebar.fixed_list, "folders");
             ui.sidebar.albums_list.unselect_all();
         }
         LibrarySource::Archive => {
