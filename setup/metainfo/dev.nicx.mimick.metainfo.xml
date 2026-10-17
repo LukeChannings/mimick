@@ -111,6 +111,29 @@
   </keywords>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="9.11.0" date="2026-10-17">
+      <description>
+        <ul>
+          <li>New library pages for Favorites, Archive, Trash, Shared Albums, Shared Links, People, Tags, Folders, and partner Sharing.</li>
+          <li>Move photos to the trash, then restore them, delete them for good, or empty the trash.</li>
+          <li>Add, create, and remove tags on photos, and see every photo with a tag.</li>
+          <li>Mark photos and people as favorites.</li>
+          <li>Edit a photo's description, date taken, and favorite status. The date is now picked from a calendar.</li>
+          <li>Rename albums, edit their descriptions, and share them with other people.</li>
+          <li>Create and manage public shared links for albums and photos.</li>
+          <li>Rename, hide, merge, and set birthdays for people.</li>
+          <li>Each view now has a header with its details and actions.</li>
+          <li>Mouse back and forward buttons, Alt+Right, and swipe to go back.</li>
+          <li>Bottom navigation bar on narrow windows.</li>
+          <li>Watch folders can now upload straight to your library without an album.</li>
+          <li>Pages and options for features turned off on your Immich server are now hidden.</li>
+          <li>New server About dialog with Immich version details.</li>
+          <li>API keys can now be saved on desktops without a keyring service.</li>
+          <li>Fixed the app hanging at startup when the keyring was misconfigured.</li>
+          <li>Fixed the phone layout never turning on for small screens.</li>
+        </ul>
+      </description>
+    </release>
     <release version="9.10.0" date="2026-10-01">
       <description>
         <ul>
