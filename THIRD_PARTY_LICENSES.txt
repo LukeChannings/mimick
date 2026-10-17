@@ -809,7 +809,7 @@ For these and/or other purposes and motivations, and without any expectation of 
 --------------------------------------------------------------------------------
 GNU General Public License v3.0 or later (GPL-3.0-or-later)
 Used by:
-  - mimick 9.10.0
+  - mimick 9.11.0
 --------------------------------------------------------------------------------
 
                     GNU GENERAL PUBLIC LICENSE
@@ -1901,7 +1901,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - mio 1.2.3
+  - mio 1.2.4
 --------------------------------------------------------------------------------
 
 Copyright (c) 2014 Carl Lerche and other MIO contributors
@@ -2042,7 +2042,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - uuid 1.26.1
+  - uuid 1.28.0
 --------------------------------------------------------------------------------
 
 Copyright (c) 2014 The Rust Project Developers
@@ -2173,7 +2173,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - hyper 1.11.1
+  - hyper 1.12.0
 --------------------------------------------------------------------------------
 
 Copyright (c) 2014-2026 Sean McArthur
@@ -2202,7 +2202,7 @@ THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - unicase 2.9.0
+  - unicase 2.10.0
 --------------------------------------------------------------------------------
 
 Copyright (c) 2014-2026 Sean McArthur
@@ -2232,7 +2232,7 @@ THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - either 1.18.0
+  - either 1.19.0
 --------------------------------------------------------------------------------
 
 Copyright (c) 2015
@@ -2403,7 +2403,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - schannel 0.1.29
+  - schannel 0.1.30
 --------------------------------------------------------------------------------
 
 Copyright (c) 2015 steffengy
@@ -2731,7 +2731,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - equivalent 1.0.2
+  - equivalent 1.0.3
 --------------------------------------------------------------------------------
 
 Copyright (c) 2016--2023
@@ -3235,7 +3235,7 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - h2 0.4.19
+  - h2 0.4.20
 --------------------------------------------------------------------------------
 
 Copyright (c) 2017 h2 authors
@@ -3622,7 +3622,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - smallvec 1.16.2
+  - smallvec 1.16.3
 --------------------------------------------------------------------------------
 
 Copyright (c) 2018 The Servo Project Developers
@@ -3688,7 +3688,7 @@ THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - want 0.3.1
+  - want 0.3.2
 --------------------------------------------------------------------------------
 
 Copyright (c) 2018-2019 Sean McArthur
@@ -3886,7 +3886,7 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - zeroize 1.9.0
+  - zeroize 1.9.1
 --------------------------------------------------------------------------------
 
 Copyright (c) 2018-2026 The RustCrypto Project Developers
@@ -4680,9 +4680,9 @@ MIT License (MIT)
 Used by:
   - zbus 5.19.0
   - zbus_macros 5.19.0
-  - zbus_names 4.3.4
-  - zvariant 5.15.0
-  - zvariant_derive 5.15.0
+  - zbus_names 4.3.5
+  - zvariant 5.15.1
+  - zvariant_derive 5.15.1
 --------------------------------------------------------------------------------
 
 Copyright (c) 2024 Zeeshan Ali Khan & zbus contributors
@@ -4752,9 +4752,9 @@ DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - toml_datetime 1.1.1+spec-1.1.0
-  - toml_edit 0.25.15+spec-1.1.0
-  - toml_parser 1.1.3+spec-1.1.0
+  - toml_datetime 1.1.2+spec-1.1.0
+  - toml_edit 0.25.17+spec-1.1.0
+  - toml_parser 1.1.5+spec-1.1.0
 --------------------------------------------------------------------------------
 
 Copyright (c) Individual contributors
@@ -4783,7 +4783,7 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - libc 0.2.189
+  - libc 0.2.191
 --------------------------------------------------------------------------------
 
 Copyright (c) The Rust Project Developers
@@ -5023,8 +5023,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - zerocopy-derive 0.8.59
-  - zerocopy 0.8.59
+  - zerocopy-derive 0.8.63
+  - zerocopy 0.8.63
 --------------------------------------------------------------------------------
 
 Copyright 2023 The Fuchsia Authors
@@ -5677,8 +5677,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - tokio-util 0.7.19
-  - tokio 1.53.1
+  - tokio-util 0.7.20
+  - tokio 1.53.3
 --------------------------------------------------------------------------------
 
 MIT License
@@ -6001,38 +6001,6 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 MIT License (MIT)
 Used by:
-  - async-recursion 1.1.1
---------------------------------------------------------------------------------
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-
-================================================================================
-
---------------------------------------------------------------------------------
-MIT License (MIT)
-Used by:
   - adler2 2.0.1
   - anyhow 1.0.104
   - async-trait 0.1.92
@@ -6074,15 +6042,15 @@ Used by:
   - serde_bytes 0.11.19
   - serde_core 1.0.229
   - serde_derive 1.0.229
-  - serde_json 1.0.151
+  - serde_json 1.0.154
   - serde_repr 0.1.21
   - syn 2.0.119
-  - syn 3.0.6
+  - syn 3.0.9
   - thiserror-impl 1.0.69
   - thiserror-impl 2.0.21
   - thiserror 1.0.69
   - thiserror 2.0.21
-  - unicode-ident 1.0.26
+  - unicode-ident 1.0.27
   - wasi 0.11.1+wasi-snapshot-preview1
   - wasm-streams 0.5.0
   - x11-dl 2.21.0
@@ -6114,6 +6082,38 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
+
+================================================================================
+
+--------------------------------------------------------------------------------
+MIT License (MIT)
+Used by:
+  - async-recursion 1.2.0
+--------------------------------------------------------------------------------
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 
 ================================================================================
 
@@ -7361,7 +7361,7 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 --------------------------------------------------------------------------------
 Unicode License v3 (Unicode-3.0)
 Used by:
-  - unicode-ident 1.0.26
+  - unicode-ident 1.0.27
 --------------------------------------------------------------------------------
 
 UNICODE LICENSE V3
