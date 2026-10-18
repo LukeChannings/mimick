@@ -6,7 +6,9 @@ use crate::api_client::LibraryAsset;
 use crate::library::asset_object::AssetObject;
 
 use super::LibraryWindowUi;
-use super::actions::{TrashTarget, remove_assets_from_grid};
+use super::actions::{
+    TrashTarget, expand_stack_targets, remove_assets_from_grid, report_fan_out_error,
+};
 use super::context_menu::show_alert_dialog;
 use super::state::LibrarySource;
 
@@ -36,16 +38,21 @@ pub(super) fn set_archived(
     archived: bool,
     on_done: impl Fn(bool) + 'static,
 ) {
-    let ids: Vec<String> = items
-        .iter()
-        .filter_map(TrashTarget::from_item)
-        .map(|target| target.remote_id().to_string())
-        .collect();
-    if ids.is_empty() {
+    let targets: Vec<TrashTarget> = items.iter().filter_map(TrashTarget::from_item).collect();
+    if targets.is_empty() {
         return;
     }
     let ui = ui.clone();
     glib::MainContext::default().spawn_local(async move {
+        // A Stack tile archives every member: resolve all stacks first so a failure
+        // (e.g. no `stack.read`) aborts before anything is changed.
+        let ids = match expand_stack_targets(&ui, &targets).await {
+            Ok(ids) => ids,
+            Err(err) => {
+                report_fan_out_error(&ui, &err, archive_failure_heading(archived));
+                return;
+            }
+        };
         let visibility = if archived { "archive" } else { "timeline" };
         if let Err(err) = ui
             .ctx
@@ -53,12 +60,7 @@ pub(super) fn set_archived(
             .set_assets_visibility(&ids, visibility)
             .await
         {
-            let heading = if archived {
-                "Could Not Archive"
-            } else {
-                "Could Not Unarchive"
-            };
-            show_alert_dialog(&ui, heading, &err);
+            show_alert_dialog(&ui, archive_failure_heading(archived), &err);
             return;
         }
         for item in &items {
@@ -74,6 +76,14 @@ pub(super) fn set_archived(
         }
         on_done(removed);
     });
+}
+
+fn archive_failure_heading(archived: bool) -> &'static str {
+    if archived {
+        "Could Not Archive"
+    } else {
+        "Could Not Unarchive"
+    }
 }
 
 pub(super) fn sync_bulk_button(button: &gtk::Button, source: &LibrarySource) {
