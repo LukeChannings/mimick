@@ -14,7 +14,7 @@ use crate::library::asset_object::AssetObject;
 use crate::library::state::{LibrarySource, Location};
 use crate::settings_window::{build_settings_window_with_parent, show_queue_inspector};
 
-use super::download::{open_local_with_default_app, spawn_video_handoff};
+use super::download::open_local_with_default_app;
 use super::navigation;
 use super::{LibraryWindowUi, load_albums, load_source_page, load_status, open_lightbox};
 
@@ -379,23 +379,11 @@ pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
         else {
             return;
         };
-        // Videos open in the system default player, which needs the real filename:
-        // a thin Main library tile hydrates first (one round-trip).
-        if item.asset_type().eq_ignore_ascii_case("VIDEO") {
-            let ui = ui_for_activate.clone();
-            glib::MainContext::default().spawn_local(async move {
-                if let Err(err) = super::hydration::hydrate_object(&ui, &item).await {
-                    log::warn!("Could not load video {}: {}", item.id(), err);
-                    super::context_menu::show_alert_dialog(&ui, "Could Not Play Video", &err);
-                    return;
-                }
-                let local_path = item.local_path();
-                if !local_path.is_empty() {
-                    open_local_with_default_app(&local_path);
-                } else {
-                    spawn_video_handoff(ui.clone(), item.id(), item.filename());
-                }
-            });
+        // Videos open in the lightbox like photos (poster plus a play badge
+        // that hands off to the system player); local-only files have no
+        // poster on the server, so they go straight to the default app.
+        if item.asset_type().eq_ignore_ascii_case("VIDEO") && !item.local_path().is_empty() {
+            open_local_with_default_app(&item.local_path());
             return;
         }
 

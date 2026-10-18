@@ -93,23 +93,35 @@ pub(super) fn spawn_video_handoff(ui: Rc<LibraryWindowUi>, asset_id: String, fil
         let _ = tokio::fs::create_dir_all(&cache_dir).await;
         let safe_name =
             crate::sanitize::safe_filename(&filename).unwrap_or_else(|| asset_id.clone());
-        let path = cache_dir.join(&safe_name);
-        if !path.exists()
-            && let Err(err) = {
-                begin_download_session(&ui.ctx, filename.clone());
-                let progress =
-                    track_download_item(&ui.ctx, asset_id.clone(), Some(filename.clone()), None);
-                let result = ui
-                    .ctx
-                    .api_client
-                    .download_original_to_file(&asset_id, &path, Some(progress))
-                    .await;
-                finish_download_item(&ui.ctx, &asset_id);
-                result
+        // The asset id keys the cache entry: two assets sharing a filename must
+        // not collide, and renaming the layout also orphans any truncated files
+        // an older build left behind.
+        let path = cache_dir.join(format!("{asset_id}-{safe_name}"));
+        if !path.exists() {
+            // Stream to a .part file and rename only on success, so an
+            // interrupted download can never leave a broken "cached" video
+            // that every later playback reuses.
+            let part = cache_dir.join(format!("{asset_id}-{safe_name}.part"));
+            begin_download_session(&ui.ctx, filename.clone());
+            let progress =
+                track_download_item(&ui.ctx, asset_id.clone(), Some(filename.clone()), None);
+            let result = ui
+                .ctx
+                .api_client
+                .download_original_to_file(&asset_id, &part, Some(progress))
+                .await;
+            finish_download_item(&ui.ctx, &asset_id);
+            let result = match result {
+                Ok(()) => tokio::fs::rename(&part, &path)
+                    .await
+                    .map_err(|e| e.to_string()),
+                Err(err) => Err(err),
+            };
+            if let Err(err) = result {
+                let _ = tokio::fs::remove_file(&part).await;
+                log::warn!("Video handoff failed for {}: {}", asset_id, err);
+                return;
             }
-        {
-            log::warn!("Video handoff failed for {}: {}", asset_id, err);
-            return;
         }
         open_local_with_default_app(&path.display().to_string());
     });
