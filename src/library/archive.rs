@@ -36,6 +36,19 @@ pub(super) fn set_archived(
     archived: bool,
     on_done: impl Fn(bool) + 'static,
 ) {
+    set_archived_with(ui, items, archived, true, on_done);
+}
+
+/// [`set_archived`] that can leave the grid untouched (`remove_from_grid` false):
+/// `on_done` still learns whether the asset left the current view. Used by the
+/// lightbox for stack members, which are not grid tiles.
+pub(super) fn set_archived_with(
+    ui: &Rc<LibraryWindowUi>,
+    items: Vec<AssetObject>,
+    archived: bool,
+    remove_from_grid: bool,
+    on_done: impl Fn(bool) + 'static,
+) {
     let ids: Vec<String> = items
         .iter()
         .filter_map(TrashTarget::from_item)
@@ -69,7 +82,7 @@ pub(super) fn set_archived(
             set_visibility_in(&mut state.assets, &ids, visibility);
             leaves_view(&state.source, archived)
         };
-        if removed {
+        if removed && remove_from_grid {
             remove_assets_from_grid(&ui, &ids);
         }
         on_done(removed);

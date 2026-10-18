@@ -156,6 +156,9 @@ struct LibraryWindowUi {
     drop_overlay: gtk::Revealer,
     /// Main library bucket state (see `main_library.rs`).
     buckets: RefCell<bucket_store::BucketStore>,
+    /// Stack members the open lightbox is showing (they are not grid tiles), so a
+    /// favorite saved in Edit Info can reach them. Empty when no stack is open.
+    lightbox_members: RefCell<Vec<asset_object::AssetObject>>,
 }
 
 /// Build and display the main library window application layout.

@@ -249,6 +249,7 @@ impl LibraryWindowUi {
             split: parts.split,
             drop_overlay: parts.drop_overlay,
             buckets: std::cell::RefCell::default(),
+            lightbox_members: std::cell::RefCell::default(),
         }
     }
 }

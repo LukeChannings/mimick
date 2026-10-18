@@ -76,6 +76,14 @@ pub(super) fn apply_saved_favorite(ui: &LibraryWindowUi, asset_id: &str, favorit
         .find(|item| {
             item.property::<String>("id") == asset_id
                 || item.property::<String>("remote-id") == asset_id
+        })
+        // A stack member open in the lightbox is not a grid tile.
+        .or_else(|| {
+            let members = ui.lightbox_members.borrow();
+            members
+                .iter()
+                .find(|member| member.id() == asset_id)
+                .cloned()
         });
     match item {
         Some(item) => show_favorite(ui, &item, asset_id, favorite),

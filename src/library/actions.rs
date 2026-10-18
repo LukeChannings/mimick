@@ -299,6 +299,19 @@ pub(super) fn confirm_trash(
     skipped_local: usize,
     on_trashed: impl Fn() + 'static,
 ) {
+    confirm_trash_with(ui, targets, skipped_local, true, on_trashed);
+}
+
+/// [`confirm_trash`] that can leave the grid untouched (`remove_from_grid` false).
+/// The lightbox uses that for stack members: a member is not a grid tile, and
+/// dropping the Primary's tile would shift the positions under the open viewer.
+pub(super) fn confirm_trash_with(
+    ui: Rc<LibraryWindowUi>,
+    targets: Vec<TrashTarget>,
+    skipped_local: usize,
+    remove_from_grid: bool,
+    on_trashed: impl Fn() + 'static,
+) {
     if targets.is_empty() {
         return;
     }
@@ -325,7 +338,7 @@ pub(super) fn confirm_trash(
         let ids = ids.clone();
         let on_trashed = on_trashed.clone();
         glib::MainContext::default().spawn_local(async move {
-            match trash_assets(&ui, &ids).await {
+            match trash_assets(&ui, &ids, remove_from_grid).await {
                 Ok(()) => on_trashed(),
                 Err(err) => {
                     log::error!("Move to trash failed: {}", err);
@@ -341,10 +354,18 @@ pub(super) fn confirm_trash(
     dialog.present(Some(&ui.window));
 }
 
-/// Trash on the server, then drop the items from the grid.
-async fn trash_assets(ui: &Rc<LibraryWindowUi>, ids: &[String]) -> Result<(), String> {
+/// Trash on the server, then drop the items from the grid (or just refresh counts).
+async fn trash_assets(
+    ui: &Rc<LibraryWindowUi>,
+    ids: &[String],
+    remove_from_grid: bool,
+) -> Result<(), String> {
     ui.ctx.api_client.delete_assets(ids).await?;
-    remove_assets_from_grid(ui, ids);
+    if remove_from_grid {
+        remove_assets_from_grid(ui, ids);
+    } else {
+        super::refresh_library_after_mutation(ui.clone(), false);
+    }
     Ok(())
 }
 

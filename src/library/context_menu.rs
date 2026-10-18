@@ -14,8 +14,8 @@ use crate::library::asset_object::AssetObject;
 
 use super::LOCAL_ID_PREFIX;
 use super::LibraryWindowUi;
-use super::actions::{TrashTarget, confirm_trash};
-use super::archive::{archive_label, set_archived};
+use super::actions::{TrashTarget, confirm_trash_with};
+use super::archive::{archive_label, set_archived_with};
 use super::asset_edit::show_edit_dialog;
 use super::download::{
     begin_download_session, finish_download_item, open_local_with_default_app, start_download,
@@ -30,6 +30,9 @@ pub(super) struct AssetMenuHooks {
     pub on_trashed: Rc<dyn Fn()>,
     /// Receives whether the capture date changed.
     pub on_edited: Rc<dyn Fn(bool)>,
+    /// The asset is not a grid tile (a stack member shown in the lightbox): trashing
+    /// or archiving it must leave the grid's tiles, and so their positions, alone.
+    pub detached: bool,
 }
 
 impl AssetMenuHooks {
@@ -38,6 +41,7 @@ impl AssetMenuHooks {
     pub(super) fn for_grid(ui: &Rc<LibraryWindowUi>) -> Self {
         let ui = ui.clone();
         Self {
+            detached: false,
             on_trashed: Rc::new(|| {}),
             on_edited: Rc::new(move |date_changed| {
                 if date_changed {
@@ -83,6 +87,19 @@ pub(super) fn show_asset_context_menu(
     let Some(item) = ui.grid.model.item(position).and_downcast::<AssetObject>() else {
         return;
     };
+    show_item_context_menu(ui, parent, item, x, y, hooks);
+}
+
+/// [`show_asset_context_menu`] for an asset that is not (or not only) a grid
+/// position, such as the stack member the lightbox is showing.
+pub(super) fn show_item_context_menu(
+    ui: Rc<LibraryWindowUi>,
+    parent: &impl gtk::prelude::IsA<gtk::Widget>,
+    item: AssetObject,
+    x: f64,
+    y: f64,
+    hooks: AssetMenuHooks,
+) {
     if item.id().is_empty() {
         return;
     }
@@ -204,6 +221,7 @@ fn append_manage_buttons(
         return;
     }
 
+    let detached = hooks.detached;
     append_favorite_button(menu, ui, item, &hooks);
     append_archive_button(menu, ui, item, &hooks);
     let (ui_link, link_id) = (ui.clone(), remote_id.clone());
@@ -230,13 +248,14 @@ fn append_manage_buttons(
             on_edited.clone(),
         )
     });
-    append_trash_button(menu, ui, target, hooks.on_trashed);
+    append_trash_button(menu, ui, target, detached, hooks.on_trashed);
 }
 
 fn append_trash_button(
     menu: &Menu,
     ui: &Rc<LibraryWindowUi>,
     target: TrashTarget,
+    detached: bool,
     on_trashed: Rc<dyn Fn()>,
 ) {
     // The popover is single-use, so the target is handed to the dialog on the first click.
@@ -250,7 +269,7 @@ fn append_trash_button(
     menu.add(label, true, move || {
         if let Some(target) = target.borrow_mut().take() {
             let on_trashed = on_trashed.clone();
-            confirm_trash(ui.clone(), vec![target], 0, move || on_trashed());
+            confirm_trash_with(ui.clone(), vec![target], 0, !detached, move || on_trashed());
         }
     });
 }
@@ -287,17 +306,19 @@ fn append_archive_button(
     hooks: &AssetMenuHooks,
 ) {
     let archived = item.is_archived();
+    let detached = hooks.detached;
     let (ui, item) = (ui.clone(), item.clone());
     let (on_edited, on_trashed) = (hooks.on_edited.clone(), hooks.on_trashed.clone());
     menu.add(archive_label(archived), false, move || {
         let (on_edited, on_trashed) = (on_edited.clone(), on_trashed.clone());
-        set_archived(&ui, vec![item.clone()], !archived, move |removed| {
+        let on_done = move |removed| {
             if removed {
                 on_trashed()
             } else {
                 on_edited(false)
             }
-        });
+        };
+        set_archived_with(&ui, vec![item.clone()], !archived, !detached, on_done);
     });
 }
 
