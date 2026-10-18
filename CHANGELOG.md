@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Stacked assets (burst shots, RAW+JPEG) now collapse into a single tile with a count badge in the Photos library. Archiving or trashing a stack tile applies to every photo in the stack; favorite, download, and copy apply to the primary only.
+- Added a stack strip to the lightbox: open a stack tile and pick any member from a thumbnail strip along the bottom. Needs the optional `stack.read` API-key permission; Settings → Test Connection and Save now warn if the key lacks it (saving is never blocked).
+- The Photos library now scrolls virtually with a full-height scrollbar from the start, month labels between sections, and an exact floating month banner.
+
+### Changed
+
+- The Photos library now requires Immich v1.133 or newer. Older servers show a "server too old" message in the library view; uploads and sync are unaffected.
+
+### Removed
+
+- Removed the Timeline toggle; the Photos library is always newest-first and month-sectioned.
+- Removed the Filename and File Type sorts and the grid sort dropdown.
+
 ## [9.11.0] - 2026-10-17
 
 ### Added

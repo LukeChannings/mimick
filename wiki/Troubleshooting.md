@@ -39,6 +39,7 @@ The key is valid but missing one or more permissions Mimick uses. Confirm in Imm
 
 - Base sync: `user.read`, `asset.upload`, `asset.update`, `album.read`, `album.create`, `albumAsset.create`
 - Add `asset.read`, `asset.view`, `asset.download`, and `person.read` if you use Library view or Download Only / Full sync method
+- Add `stack.read` if you want to view stack contents in the lightbox or archive/delete whole stacks
 - Add `asset.delete` and `albumAsset.delete` if you enabled **Mirror Folder Deletions to Album** in any folder's rules
 
 See Configuration & First Run → "API Key Security & Required Permissions" for the full feature/permission mapping.
@@ -104,6 +105,18 @@ If uploads do not resume on their own:
 - If you manually paused it, use **Pause / Resume** from the tray or settings window.
 - If **Pause on Metered Network** is enabled, Mimick may pause while `nmcli` reports a metered or guessed-metered connection.
 - If **Pause on Battery Power** is enabled, Mimick may pause while the system appears to be running on battery according to `/sys/class/power_supply`.
+
+## Library View Issues
+
+### Library says the server is too old
+
+The Photos page needs Immich v1.133 or newer (it uses the timeline bucket API). On an older server the library view shows a "server too old" message instead of photos. Upgrade Immich to v1.133+. Uploads and sync keep working on older servers; only the Photos page is affected.
+
+### Stack strip missing in the lightbox
+
+Opening a stack tile should show a strip of thumbnails for the other members. If it never appears, the API key most likely lacks `stack.read` (Account Settings → API Keys → edit). Settings → **Test Connection** warns when the key lacks it. Without `stack.read` Mimick hides the strip silently, and archiving or trashing a whole stack is refused with a permission message (nothing is changed). Everything else keeps working.
+
+---
 
 ## Logs & Diagnostics
 

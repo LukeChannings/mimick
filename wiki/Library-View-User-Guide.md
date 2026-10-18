@@ -22,7 +22,7 @@ The window uses a sidebar + content split.
 **Sidebar** (toggle with **F9** or the sidebar button in the header), in three groups:
 
 - **Library**
-  - **Photos** — opens the timeline grid
+  - **Photos** — opens the main library, newest first
   - **Explore** — People, Places, Things
   - **People** — everyone Immich has recognized (see [People](#people))
   - **Favorites** — assets you've marked as favorites (see [Favorites](#favorites))
@@ -73,9 +73,8 @@ If Mimick can't read these settings (for example, an API key without `userPrefer
 
 **Controls row** (one row above the content, at every window width):
 
-- **Timeline** toggle, on Photos only
 - source selector (**Remote / Local / Unified**), inside albums only
-- sort selector (**Newest / Filename / File Type**, or the album sorts on the Albums page), where there's something to sort
+- sort selector, on the Albums page only (album sorts)
 - **Upload** button (invokes the manual multi-file picker)
 
 | Search Options | View Options |
@@ -86,26 +85,43 @@ If Mimick can't read these settings (for example, an API key without `userPrefer
 
 ## Browsing Assets
 
-### Grid and Pagination
+### Grid and Scrolling
 
-Assets load in pages of 50. Scroll to the bottom of the grid to load the next page. The footer label shows the current count.
+Albums, search results, and the other views load in pages of 50: scroll to the bottom of the grid to load the next page. The footer label shows the current count. The Photos page works differently (see [Main Library Order](#main-library-order)).
 
 Thumbnails are loaded asynchronously. A placeholder is shown while the thumbnail downloads. Decoded thumbnails are cached in RAM up to the configured limit (`library_thumbnail_cache_mb`, default 80 MB).
 
-### Sorting
+### Main Library Order
 
-Use the sort dropdown to order the current view by:
+The Photos page is a single view of your whole library, always newest first, split into month sections with a month label at the start of each (a floating month-year banner follows you as you scroll). The scrollbar spans the whole library from the start, and months load as you scroll to them, so you can drag straight to a date far down the library.
 
-- **Newest** — most recently created first
-- **Filename** — alphabetical
-- **File Type** — grouped by MIME type
-- **Sync State** — local-only assets first, then synced
+**Requires Immich v1.133 or newer.** On an older server the library view shows a "server too old" message. Uploads and sync are unaffected.
 
-Sort applies to the current source and page.
+---
 
-### Timeline View
+## Stacks
 
-The **Timeline** button in the header switches the Remote source between a standard paged grid and a timeline layout that groups assets by date. Timeline is only available for the Remote source; it is hidden when Local or Unified is active.
+Immich groups related assets (burst shots, RAW+JPEG pairs) into **stacks**, and one asset in each stack is the **primary**. In the **Photos** page, in the Remote and Unified sources, each stack collapses into a single **stack tile** that shows the primary. Every other view (albums, search, favorites, people, tags, places, trash) shows each asset individually, and the Local source has no stacks because stacks exist only on the server.
+
+- **Badge:** a stack tile carries a small badge with the number of photos in the stack.
+- **Lightbox strip:** opening a stack tile shows the primary with a read-only strip of thumbnails along the bottom. Click a thumbnail to view that member. The arrow keys and swipes move between tiles, never into a stack; the strip is the only way to move within one. Lightbox actions apply to the member currently shown. Showing the strip needs the `stack.read` API-key permission; without it the strip is simply hidden.
+- Mimick does not change stacks: you can't set a primary or unstack from the strip. Use the Immich web app for that.
+
+What an action does when you use it on a stack tile in the grid:
+
+| Action | Applies to |
+| :--- | :--- |
+| Archive / Unarchive | **All** photos in the stack |
+| Move to trash | **All** photos in the stack |
+| Favorite / Unfavorite | The primary only |
+| Download | The primary only (one file) |
+| Copy to clipboard | The primary only |
+| Open | The primary, with the strip showing the other members |
+| Add to a shared link | The primary only |
+
+> **Trashing a stack removes every member, not just the tile you see.** The confirmation says how many photos are involved (for example, "Move stack of 4 to trash?"). Favorite and download only touch the primary.
+
+Archiving or trashing a stack needs `stack.read` so Mimick can list every member first. Without it the action is refused with a permission message and nothing is changed; the same actions on unstacked photos work normally.
 
 ---
 
@@ -265,7 +281,7 @@ Click any asset in the grid to open it in the lightbox.
 - EXIF metadata is fetched (including for local files) and displayed alongside the asset.
 - **Download** saves the original file to the configured download folder.
 - **Move to trash** (trash button or **Delete**) moves the asset to the Immich trash after a confirmation, then shows the next asset. If it was the last one the lightbox steps back; if nothing is left it closes. Local copies are kept.
-- **Edit Info…** in the details pane (also in the right-click menu) edits the description, the date taken, and the favorite flag (heart toggle). For the date, click the calendar button: pick a day, set the hour, minute, and second, then **Set Date** (local time). Only changed fields are sent to Immich. If you change the date, the grid reloads when you close the lightbox, since the asset moves in the timeline.
+- **Edit Info…** in the details pane (also in the right-click menu) edits the description, the date taken, and the favorite flag (heart toggle). For the date, click the calendar button: pick a day, set the hour, minute, and second, then **Set Date** (local time). Only changed fields are sent to Immich. If you change the date, the grid reloads when you close the lightbox, since the asset moves within the library.
 - Right-clicking the picture opens the same context menu as the grid: Copy, Download, Open In, **Edit Info…**, and **Move to Trash**.
 
 ### Tags in the Details Pane
@@ -404,7 +420,7 @@ See [Performance Tuning](Performance-Tuning) for guidance on choosing values for
 
 ## Archive
 
-- Archiving hides an asset from the **Photos** timeline without deleting it.
+- Archiving hides an asset from the **Photos** page without deleting it.
 - Archive from the right-click menu, the lightbox's archive button (or **A**), or the selection bar.
 - The **Archive** sidebar entry lists archived assets; **Unarchive** there puts them back in Photos.
 

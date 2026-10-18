@@ -9,6 +9,7 @@ use crate::app_context::AppContext;
 use crate::autostart;
 use crate::config::{ApiKeyStorage, WatchPathEntry};
 
+use super::connectivity::permission_warning;
 use super::form::{
     ConnectionValues, SettingsForm, SettingsValues, apply_to_config, validate_connection,
 };
@@ -135,16 +136,38 @@ async fn save_and_apply(form: &SettingsForm, state: &ApplyState, request: ApplyR
         .set(request.values.background_sync_enabled);
     update_api_client(state, &request).await;
     apply_sync_runtime(state, &request);
+    // Saving is already done; the probe only adds a warning and never blocks anything.
+    let permission_note = probe_permission_note(state, &request).await;
 
     state.in_flight.set(false);
     if let Some(notice) = key_file_notice {
-        show_alert(&form.window, "API Key Stored in a File", &notice);
+        let body = join_notes(notice, permission_note);
+        show_alert(&form.window, "API Key Stored in a File", &body);
     } else if request.show_success_ack {
-        show_alert(
-            &form.window,
-            "Settings Saved",
-            "Mimick saved the updated settings successfully.",
+        let body = join_notes(
+            "Mimick saved the updated settings successfully.".to_string(),
+            permission_note,
         );
+        show_alert(&form.window, "Settings Saved", &body);
+    } else if let Some(note) = permission_note {
+        show_alert(&form.window, "Settings Saved", &note);
+    }
+}
+
+/// Probe optional key permissions once after a Save-button apply. `None` when nothing is
+/// missing, the key is empty, or this was an auto-apply.
+async fn probe_permission_note(state: &ApplyState, request: &ApplyRequest) -> Option<String> {
+    if !request.include_connectivity || request.conn.api_key.is_empty() {
+        return None;
+    }
+    let results = state.ctx.api_client.probe_permissions().await;
+    permission_warning(&results)
+}
+
+fn join_notes(message: String, permission_note: Option<String>) -> String {
+    match permission_note {
+        Some(note) => format!("{message}\n\n{note}"),
+        None => message,
     }
 }
 

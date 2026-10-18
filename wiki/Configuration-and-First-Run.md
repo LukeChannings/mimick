@@ -368,6 +368,7 @@ When generating an API Key in the Immich Web UI (Account Settings → API Keys),
 | Shared Albums (share your albums, change roles, remove people) | `album.read`, `albumUser.create`, `albumUser.update`, `albumUser.delete`, `user.read` |
 | Shared Links (create, copy, edit, delete public links) | `sharedLink.read`, `sharedLink.create`, `sharedLink.update`, `sharedLink.delete` |
 | Library / Explore view (browse photos inside Mimick) | `asset.read`, `asset.view`, `asset.download`, `person.read` |
+| Stacks (view stack contents in the lightbox; archive/delete whole stacks) | `stack.read` (optional — without it stacks still collapse to one tile, but the lightbox strip is hidden and stack archive/delete is refused) |
 | Edit info / move to trash from the library | `asset.update`, `asset.delete` |
 | Trash view (restore, delete permanently, empty trash) | `asset.read`, `asset.delete` |
 | Tags in the details pane and tag search | `tag.read`; adding/removing tags also needs `tag.asset`, and creating new tags `tag.create` |
