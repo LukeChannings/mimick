@@ -20,6 +20,8 @@ pub(super) enum RequestContext {
     AssetDownload,
     ServerStats,
     ServerAbout,
+    Timeline,
+    Stack,
 }
 
 /// Map an HTTP status code to an actionable user-facing `ApiIssue`.
@@ -102,6 +104,8 @@ fn failure_summary(context: RequestContext, subject: Option<&str>) -> String {
         RequestContext::ServerAbout => {
             "Immich could not load server version information".to_string()
         }
+        RequestContext::Timeline => "Immich could not load the library timeline".to_string(),
+        RequestContext::Stack => "Immich could not load the photo stack".to_string(),
     }
 }
 
@@ -149,6 +153,12 @@ pub(super) fn classify_network_issue(context: RequestContext, error: &reqwest::E
                 }
                 RequestContext::ServerAbout => {
                     "The server version request failed before completion".to_string()
+                }
+                RequestContext::Timeline => {
+                    "The library timeline request failed before completion".to_string()
+                }
+                RequestContext::Stack => {
+                    "The photo stack request failed before completion".to_string()
                 }
             },
             guidance: "Retry the request after checking network connectivity and server health."

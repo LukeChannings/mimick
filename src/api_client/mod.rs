@@ -27,8 +27,17 @@ mod sharing;
 pub use sharing::AlbumRole;
 mod shared_links;
 pub use shared_links::{SharedLink, SharedLinkOptions, SharedLinkTarget, share_url};
+mod stacks;
+// Re-exported for the stack/virtual-grid phases; not consumed yet.
+#[allow(unused_imports)]
+pub use stacks::{
+    PermissionProbeResult, PermissionState, STACK_FORBIDDEN, StackResponse, is_forbidden,
+};
 mod suggestions;
 mod tags;
+mod timeline;
+#[allow(unused_imports)]
+pub use timeline::{TileAsset, TimeBucket, bucket_label, supports_timeline_buckets};
 mod trash;
 mod upload;
 mod upload_helpers;
