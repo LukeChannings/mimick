@@ -6,7 +6,6 @@
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -132,8 +131,6 @@ pub struct AppContext {
     pub thumbnail_cache: Arc<ThumbnailCache>,
     /// GTK library view loading state container.
     pub library_state: Arc<Mutex<LibraryState>>,
-    /// True if timeline page views are currently active.
-    pub library_timeline_active: AtomicBool,
     /// Authenticated user unique identifier, fetched at bootstrap.
     pub current_user_id: Arc<Mutex<Option<String>>>,
     /// Tracking lists of deletions requested by Mimick itself.

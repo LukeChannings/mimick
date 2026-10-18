@@ -229,7 +229,6 @@ fn start_primary_instance(app: &adw::Application, shared_state: &Arc<Mutex<AppSt
         sync_now_tx: manual_sync_tx,
         thumbnail_cache: Arc::new(ThumbnailCache::new(api_client)),
         library_state: Arc::new(parking_lot::Mutex::new(LibraryState::new())),
-        library_timeline_active: std::sync::atomic::AtomicBool::new(false),
         current_user_id: Arc::new(parking_lot::Mutex::new(None)),
         expected_self_deletions: Arc::new(app_context::RecentSelfPaths::default()),
         expected_self_downloads: Arc::new(app_context::RecentSelfPaths::default()),

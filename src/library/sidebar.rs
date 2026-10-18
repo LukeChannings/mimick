@@ -1,7 +1,7 @@
 //! Sidebar navigation panel for the library window.
 //!
 //! Builds the split-pane sidebar containing album rows, fixed navigation
-//! entries (All Assets, Explore, Local, Timeline), and the folder-scoped
+//! entries (All Assets, Explore, Local), and the folder-scoped
 //! album list. Handles selection changes to drive the main grid view source.
 
 use std::cell::RefCell;
@@ -49,7 +49,7 @@ const GROUPS: [(&str, &[&str]); 3] = [
 const FIXED_ROWS: [(&str, &str, &str, &str); 13] = [
     (
         "Photos",
-        "Timeline of every photo and video",
+        "Every photo and video",
         "image-x-generic-symbolic",
         "photos",
     ),

@@ -30,12 +30,11 @@ pub(super) struct HeaderParts {
     select_toggle: gtk::ToggleButton,
 }
 
-/// Source/timeline and sort/upload controls above the grid.
+/// Source, sort and upload controls above the grid.
 pub(super) struct ControlsParts {
     root: gtk::Box,
     source_mode: gtk::DropDown,
     source_revealer: gtk::Revealer,
-    timeline_toggle: gtk::ToggleButton,
     sort_mode: gtk::DropDown,
     upload_button: gtk::Button,
 }
@@ -234,7 +233,6 @@ impl LibraryWindowUi {
             source_mode: controls.source_mode,
             source_revealer: controls.source_revealer,
             upload_button: controls.upload_button,
-            timeline_toggle: controls.timeline_toggle,
             timeline_banner: content.banner,
             source_mode_suppressed: Cell::new(false),
             sidebar_suppressed: Cell::new(false),
@@ -317,12 +315,8 @@ fn build_controls() -> ControlsParts {
         .selected(0)
         .tooltip_text("Asset source")
         .build();
-    let timeline_toggle = gtk::ToggleButton::builder()
-        .label("Timeline")
-        .tooltip_text("Timeline view (all assets only)")
-        .build();
     // Source mode (Remote/Local/Unified) is meaningful only inside a linked
-    // album; `apply_timeline_ui_state` reveals it per source kind.
+    // album; `apply_source_ui_state` reveals it per source kind.
     let source_revealer = gtk::Revealer::builder()
         .transition_type(gtk::RevealerTransitionType::SlideRight)
         .transition_duration(180)
@@ -330,7 +324,7 @@ fn build_controls() -> ControlsParts {
         .child(&source_mode)
         .build();
     let sort_mode = gtk::DropDown::builder()
-        .model(&gtk::StringList::new(&["Newest", "Filename", "File Type"]))
+        .model(&gtk::StringList::new(&["Newest", "Name", "Most assets"]))
         .selected(0)
         .build();
     let upload_button = pressable_button("document-send-symbolic", "Upload to library");
@@ -338,7 +332,6 @@ fn build_controls() -> ControlsParts {
 
     let spacer = gtk::Box::builder().hexpand(true).build();
     let root = hbox(&[
-        timeline_toggle.upcast_ref(),
         source_revealer.upcast_ref(),
         sort_mode.upcast_ref(),
         spacer.upcast_ref(),
@@ -352,7 +345,6 @@ fn build_controls() -> ControlsParts {
         root,
         source_mode,
         source_revealer,
-        timeline_toggle,
         sort_mode,
         upload_button,
     }

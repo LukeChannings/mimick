@@ -1,8 +1,8 @@
-//! Header bar button wiring, search, sort, source-mode, timeline, and sidebar/grid handlers.
+//! Header bar button wiring, search, sort, source-mode, and sidebar/grid handlers.
 //!
 //! Connects signal handlers for the library header bar controls including
-//! the search entry, sort-mode dropdown, view-source toggle, timeline
-//! scrubber, and sidebar collapse button.
+//! the search entry, sort dropdown (Albums/Explore only), view-source
+//! dropdown, and sidebar collapse button.
 
 use std::rc::Rc;
 
@@ -11,7 +11,7 @@ use gtk::prelude::*;
 use libadwaita::prelude::*;
 
 use crate::library::asset_object::AssetObject;
-use crate::library::state::{LibrarySortMode, LibrarySource, Location};
+use crate::library::state::{LibrarySource, Location};
 use crate::settings_window::{build_settings_window_with_parent, show_queue_inspector};
 
 use super::download::{open_local_with_default_app, spawn_video_handoff};
@@ -215,41 +215,29 @@ fn connect_sort_controls(ui: &Rc<LibraryWindowUi>) {
     ));
 }
 
-/// Sort options for the visible content view.
+/// Sort options for the visible content view. Grid views have no sort control.
 fn sort_labels_for_view(view: Option<&str>) -> &'static [&'static str] {
     match view {
         Some("albums") => &["Newest", "Name", "Most assets"],
         Some("explore") => &["Default"],
-        _ => &["Newest", "Filename", "File Type"],
+        _ => &[],
     }
 }
 
-/// Route a sort choice by active view. Albums uses an album-specific sort
-/// taxonomy; Explore intentionally doesn't sort the people row (curated server order).
+/// Route a sort choice by active view. Only the Albums list sorts (Explore intentionally
+/// doesn't sort the people row: curated server order).
 fn apply_sort_selection(ui: &LibraryWindowUi, selected: u32) {
-    let view = ui.content_stack.visible_child_name();
-    if view.as_deref() == Some("albums") {
+    if ui.content_stack.visible_child_name().as_deref() == Some("albums") {
         let mode = match selected {
             1 => super::albums_view::AlbumsSort::Name,
             2 => super::albums_view::AlbumsSort::MostAssets,
             _ => super::albums_view::AlbumsSort::Newest,
         };
         super::albums_view::set_sort_mode(&ui.albums, mode);
-        return;
     }
-    let sort_mode = match selected {
-        1 => LibrarySortMode::Filename,
-        2 => LibrarySortMode::FileType,
-        _ => LibrarySortMode::NewestFirst,
-    };
-    let mut state = ui.ctx.library_state.lock();
-    state.apply_sort(sort_mode);
-    ui.grid
-        .model
-        .reset(&ui.ctx, &state.assets, &state.sort_mode);
 }
 
-/// Remote/Local/Unified dropdown and the timeline toggle.
+/// Remote/Local/Unified dropdown.
 fn connect_source_controls(ui: &Rc<LibraryWindowUi>) {
     ui.source_mode.connect_selected_notify(clone!(
         #[strong]
@@ -258,36 +246,8 @@ fn connect_source_controls(ui: &Rc<LibraryWindowUi>) {
             if ui.source_mode_suppressed.get() {
                 return;
             }
-            let source = source_for_selection(
-                dropdown.selected(),
-                current_album(&ui),
-                ui.timeline_toggle.is_active(),
-            );
+            let source = source_for_selection(dropdown.selected(), current_album(&ui));
             navigation::navigate_source(&ui, source);
-        }
-    ));
-
-    ui.timeline_toggle.connect_toggled(clone!(
-        #[strong]
-        ui,
-        move |toggle| {
-            if !toggle.is_sensitive() {
-                return;
-            }
-            let current = ui.ctx.library_state.lock().source.clone();
-            if !matches!(current, LibrarySource::AllAssets | LibrarySource::Timeline) {
-                toggle.set_active(false);
-                return;
-            }
-            if matches!(current, LibrarySource::Timeline) == toggle.is_active() {
-                return;
-            }
-            let next_source = if toggle.is_active() {
-                LibrarySource::Timeline
-            } else {
-                LibrarySource::AllAssets
-            };
-            navigation::navigate_source(&ui, next_source);
         }
     ));
 }
@@ -303,18 +263,13 @@ fn current_album(ui: &LibraryWindowUi) -> Option<(String, String)> {
 }
 
 /// Source for a Remote (0) / Local (1) / Unified (2) choice, scoped to the open album if any.
-fn source_for_selection(
-    selected: u32,
-    album: Option<(String, String)>,
-    timeline_active: bool,
-) -> LibrarySource {
+fn source_for_selection(selected: u32, album: Option<(String, String)>) -> LibrarySource {
     match (selected, album) {
         (1, Some((id, name))) => LibrarySource::AlbumLocal { id, name },
         (1, None) => LibrarySource::LocalAll,
         (2, Some((id, name))) => LibrarySource::AlbumUnified { id, name },
         (2, None) => LibrarySource::Unified,
         (_, Some((id, name))) => LibrarySource::Album { id, name },
-        (_, None) if timeline_active => LibrarySource::Timeline,
         (_, None) => LibrarySource::AllAssets,
     }
 }
@@ -497,38 +452,31 @@ mod tests {
     #[test]
     fn source_for_selection_scopes_to_the_open_album() {
         assert!(matches!(
-            source_for_selection(1, album(), false),
+            source_for_selection(1, album()),
             LibrarySource::AlbumLocal { .. }
         ));
         assert!(matches!(
-            source_for_selection(2, album(), false),
+            source_for_selection(2, album()),
             LibrarySource::AlbumUnified { .. }
         ));
         assert!(matches!(
-            source_for_selection(0, album(), true),
+            source_for_selection(0, album()),
             LibrarySource::Album { .. }
         ));
     }
 
     #[test]
-    fn source_for_selection_without_album_respects_timeline() {
-        assert_eq!(
-            source_for_selection(1, None, false),
-            LibrarySource::LocalAll
-        );
-        assert_eq!(source_for_selection(2, None, false), LibrarySource::Unified);
-        assert_eq!(source_for_selection(0, None, true), LibrarySource::Timeline);
-        assert_eq!(
-            source_for_selection(0, None, false),
-            LibrarySource::AllAssets
-        );
+    fn source_for_selection_without_album_maps_to_main_library_sources() {
+        assert_eq!(source_for_selection(1, None), LibrarySource::LocalAll);
+        assert_eq!(source_for_selection(2, None), LibrarySource::Unified);
+        assert_eq!(source_for_selection(0, None), LibrarySource::AllAssets);
     }
 
     #[test]
     fn sort_labels_follow_the_visible_view() {
         assert_eq!(sort_labels_for_view(Some("albums"))[2], "Most assets");
         assert_eq!(sort_labels_for_view(Some("explore")), &["Default"]);
-        assert_eq!(sort_labels_for_view(Some("grid"))[1], "Filename");
-        assert_eq!(sort_labels_for_view(None)[0], "Newest");
+        assert!(sort_labels_for_view(Some("grid")).is_empty());
+        assert!(sort_labels_for_view(None).is_empty());
     }
 }

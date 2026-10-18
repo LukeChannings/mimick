@@ -136,7 +136,6 @@ struct LibraryWindowUi {
     source_mode: gtk::DropDown,
     source_revealer: gtk::Revealer,
     upload_button: gtk::Button,
-    timeline_toggle: gtk::ToggleButton,
     timeline_banner: gtk::Label,
     source_mode_suppressed: Cell<bool>,
     sidebar_suppressed: Cell<bool>,
@@ -243,7 +242,7 @@ fn bootstrap_window(ui: Rc<LibraryWindowUi>) {
         state.load_initial_source()
     };
 
-    apply_timeline_ui_state(&ui, &initial_request.1);
+    apply_source_ui_state(&ui, &initial_request.1);
     source_header::show(&ui, &initial_request.1);
     navigation::sync_controls(&ui, &Location::Source(initial_request.1.clone()));
     load_albums(ui.clone());
@@ -755,20 +754,10 @@ fn search_by_tag(ui: Rc<LibraryWindowUi>, tag: Tag) {
     );
 }
 
-fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
-    let timeline_allowed = matches!(source, LibrarySource::AllAssets | LibrarySource::Timeline);
-    let timeline_active = matches!(source, LibrarySource::Timeline);
-    ui.ctx
-        .library_timeline_active
-        .store(timeline_active, std::sync::atomic::Ordering::Relaxed);
-    ui.timeline_toggle.set_sensitive(timeline_allowed);
-    if ui.timeline_toggle.is_active() != timeline_active {
-        ui.timeline_toggle.set_active(timeline_active);
-    }
-    ui.timeline_banner.set_visible(timeline_active);
-    if timeline_active {
-        ui.sort_mode.set_selected(0);
-    }
+fn apply_source_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
+    // The month-year banner follows the Main library until the bucket grid rewires it.
+    ui.timeline_banner
+        .set_visible(matches!(source, LibrarySource::AllAssets));
 
     let is_local = matches!(
         source,
@@ -821,7 +810,7 @@ fn apply_timeline_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
 /// Compute and refresh the month-year overlay text dynamically while scrubbing the timeline list.
 fn update_timeline_banner_if_active(ui: &Rc<LibraryWindowUi>, adj: &gtk::Adjustment) {
     let state = ui.ctx.library_state.lock();
-    if !matches!(state.source, LibrarySource::Timeline) {
+    if !matches!(state.source, LibrarySource::AllAssets) {
         return;
     }
     if state.assets.is_empty() {
@@ -906,14 +895,6 @@ fn load_status(ui: Rc<LibraryWindowUi>) {
                 state.set_status(stats, about);
             }
             update_footer(&ui, route);
-            if matches!(
-                navigation::current(&ui),
-                Location::Source(
-                    LibrarySource::AllAssets | LibrarySource::Timeline | LibrarySource::Unified
-                )
-            ) {
-                source_header::refresh(&ui);
-            }
         }
     ));
 }
@@ -1035,9 +1016,7 @@ fn open_asset_in_lightbox(ui: Rc<LibraryWindowUi>, asset_id: String) {
                 let mut state = ui.ctx.library_state.lock();
                 let generation = state.generation;
                 state.replace_assets_with_more(generation, vec![asset], false);
-                ui.grid
-                    .model
-                    .reset(&ui.ctx, &state.assets, &state.sort_mode);
+                ui.grid.model.reset(&ui.ctx, &state.assets);
             }
 
             // Open lightbox at position 0 (the single asset).
@@ -1080,7 +1059,7 @@ fn load_source_page(ui: Rc<LibraryWindowUi>, request: (u64, LibrarySource, u32),
         ui,
         async move {
             let (generation, source, page) = request;
-            let order = ui.ctx.library_state.lock().sort_mode.server_order();
+            let order = Some(SortOrder::Desc);
             let result = fetch_source_page(&ui, source, page, order).await;
             apply_page_result(&ui, generation, append, result);
         }
@@ -1146,7 +1125,7 @@ fn remote_filters(
     order: Option<SortOrder>,
 ) -> Option<MetadataSearchFilters> {
     let base = match source {
-        LibrarySource::AllAssets | LibrarySource::Timeline => MetadataSearchFilters {
+        LibrarySource::AllAssets => MetadataSearchFilters {
             visibility: Some("timeline".to_string()),
             ..MetadataSearchFilters::default()
         },
@@ -1215,7 +1194,7 @@ async fn fetch_unified_page(
         LibrarySource::Unified => {
             let remote = api
                 .search_metadata_with_filters(
-                    &remote_filters(&LibrarySource::Timeline, order).unwrap_or_default(),
+                    &remote_filters(&LibrarySource::AllAssets, order).unwrap_or_default(),
                     page,
                     PAGE_SIZE,
                 )
@@ -1262,13 +1241,9 @@ fn apply_page_result(ui: &Rc<LibraryWindowUi>, generation: u64, append: bool, re
             return;
         }
         if append {
-            ui.grid
-                .model
-                .extend(&ui.ctx, &state.assets, &state.sort_mode);
+            ui.grid.model.extend(&ui.ctx, &state.assets);
         } else {
-            ui.grid
-                .model
-                .reset(&ui.ctx, &state.assets, &state.sort_mode);
+            ui.grid.model.reset(&ui.ctx, &state.assets);
         }
     }
     // Lock is released before touching GTK widgets so that signal handlers

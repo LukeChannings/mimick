@@ -4,7 +4,7 @@
 //! owns a `Vec<AssetObject>` reconciled from `LibraryState.assets`.
 //! `extend` is used for append-pagination (server-side date sort lets us emit
 //! a precise `items_changed(prev_n, 0, added)` so the visible viewport doesn't
-//! rebind); `reset` is used for source switches and client-side re-sorts.
+//! rebind); `reset` is used for source switches.
 
 use std::cell::RefCell;
 
@@ -17,7 +17,6 @@ use gtk::subclass::prelude::{ObjectImpl, ObjectSubclass, ObjectSubclassIsExt};
 use crate::api_client::LibraryAsset;
 use crate::app_context::AppContext;
 use crate::library::asset_object::{AssetInit, AssetObject};
-use crate::library::state::LibrarySortMode;
 
 mod imp {
     use super::{AssetObject, Cast, ObjectImpl, ObjectSubclass, RefCell, StaticType, gio, glib};
@@ -72,32 +71,27 @@ impl LibraryAssetModel {
 
     /// Replace all items and emit a `items_changed(0, prev, new)` reset.
     /// Use when the caller can't promise that existing positions are stable
-    /// (source switch, client-side sort change, dedup that affected the head).
-    pub fn reset(&self, ctx: &AppContext, assets: &[LibraryAsset], sort_mode: &LibrarySortMode) {
+    /// (source switch, dedup that affected the head).
+    pub fn reset(&self, ctx: &AppContext, assets: &[LibraryAsset]) {
         let prev_n = self.imp().items.borrow().len() as u32;
-        let new_items = build_sorted_asset_objects(assets, ctx, sort_mode);
+        let new_items = build_asset_objects(assets, ctx);
         let new_n = new_items.len() as u32;
         *self.imp().items.borrow_mut() = new_items;
         self.items_changed(0, prev_n, new_n);
     }
 
-    /// Append-style update for paginated loads. For server-side date sort
-    /// (`NewestFirst`/`OldestFirst`) the existing positions are stable so we
-    /// emit a precise tail-only `items_changed(prev_n, 0, added)`. For
-    /// client-side sort modes the entire vec may have re-ordered, so we fall
+    /// Append-style update for paginated loads. Server order keeps existing
+    /// positions stable, so we emit a precise tail-only
+    /// `items_changed(prev_n, 0, added)`; if the list shrank (dedup) we fall
     /// back to a full reset.
-    pub fn extend(&self, ctx: &AppContext, assets: &[LibraryAsset], sort_mode: &LibrarySortMode) {
+    pub fn extend(&self, ctx: &AppContext, assets: &[LibraryAsset]) {
         let prev_n = self.imp().items.borrow().len() as u32;
-        let new_items = build_sorted_asset_objects(assets, ctx, sort_mode);
+        let new_items = build_asset_objects(assets, ctx);
         let new_n = new_items.len() as u32;
-        let server_sorted = matches!(
-            sort_mode,
-            LibrarySortMode::NewestFirst | LibrarySortMode::OldestFirst
-        );
 
         *self.imp().items.borrow_mut() = new_items;
 
-        if server_sorted && new_n >= prev_n {
+        if new_n >= prev_n {
             let added = new_n - prev_n;
             if added > 0 {
                 self.items_changed(prev_n, 0, added);
@@ -131,31 +125,6 @@ impl LibraryAssetModel {
         };
         self.items_changed(prev_n, 0, objects.len() as u32);
     }
-}
-
-fn build_sorted_asset_objects(
-    assets: &[LibraryAsset],
-    ctx: &AppContext,
-    sort_mode: &LibrarySortMode,
-) -> Vec<AssetObject> {
-    let mut items = build_asset_objects(assets, ctx);
-    match sort_mode {
-        LibrarySortMode::NewestFirst | LibrarySortMode::OldestFirst => {}
-        LibrarySortMode::Filename => items.sort_by_cached_key(|o| {
-            (
-                o.property::<String>("filename").to_ascii_lowercase(),
-                o.property::<String>("id"),
-            )
-        }),
-        LibrarySortMode::FileType => items.sort_by_cached_key(|o| {
-            (
-                o.property::<String>("mime-type"),
-                o.property::<String>("filename"),
-                o.property::<String>("id"),
-            )
-        }),
-    }
-    items
 }
 
 fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetObject> {

@@ -11,7 +11,6 @@ const PAGE_SIZE: usize = 50;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LibrarySource {
     AllAssets,
-    Timeline,
     /// Random sample via `POST /api/search/random`. Used as the "Explore"
     /// sidebar destination — refresh re-rolls; pagination is meaningless.
     Explore,
@@ -117,26 +116,6 @@ impl LibrarySource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LibrarySortMode {
-    NewestFirst,
-    OldestFirst,
-    Filename,
-    FileType,
-}
-
-impl LibrarySortMode {
-    /// Server-side date order for paged remote sources, or `None` when the
-    /// mode is purely client-side (filename/filetype sort over loaded pages).
-    pub fn server_order(&self) -> Option<crate::api_client::SortOrder> {
-        match self {
-            LibrarySortMode::NewestFirst => Some(crate::api_client::SortOrder::Desc),
-            LibrarySortMode::OldestFirst => Some(crate::api_client::SortOrder::Asc),
-            LibrarySortMode::Filename | LibrarySortMode::FileType => None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LibraryLoadState {
     Idle,
     Loading,
@@ -161,7 +140,6 @@ pub struct LibraryState {
     pub nav_history: VecDeque<Location>,
     pub forward_history: Vec<Location>,
     pub location: Location,
-    pub sort_mode: LibrarySortMode,
     pub load_state: LibraryLoadState,
     pub selected_asset_id: Option<String>,
     pub albums: Vec<LibraryAlbum>,
@@ -181,7 +159,6 @@ impl Default for LibraryState {
             nav_history: VecDeque::new(),
             forward_history: Vec::new(),
             location: Location::Source(LibrarySource::AllAssets),
-            sort_mode: LibrarySortMode::NewestFirst,
             load_state: LibraryLoadState::Idle,
             selected_asset_id: None,
             albums: Vec::new(),
@@ -265,7 +242,6 @@ impl LibraryState {
         } else {
             LibraryLoadState::Loaded
         };
-        self.apply_sort(self.sort_mode.clone());
         true
     }
 
@@ -293,16 +269,7 @@ impl LibraryState {
         } else {
             LibraryLoadState::Loaded
         };
-        self.apply_sort(self.sort_mode.clone());
         true
-    }
-
-    /// Records the user's preferred sort mode. `LibraryState.assets` is always
-    /// stored in insertion (server) order so that the sliding-window FIFO
-    /// eviction is well-defined; the listmodel layer applies client-side sort
-    /// visually for `Filename`/`FileType`.
-    pub fn apply_sort(&mut self, mode: LibrarySortMode) {
-        self.sort_mode = mode;
     }
 
     pub fn clear_search_restore_previous_source(&mut self) -> Option<(u64, LibrarySource, u32)> {
@@ -419,20 +386,6 @@ mod tests {
             state.assets.iter().map(|a| a.id.clone()).collect();
         assert_eq!(unique.len(), state.assets.len());
         assert_eq!(state.assets.len(), 100);
-    }
-
-    #[test]
-    fn test_sort_mode_server_order_mapping() {
-        assert!(matches!(
-            LibrarySortMode::NewestFirst.server_order(),
-            Some(crate::api_client::SortOrder::Desc)
-        ));
-        assert!(matches!(
-            LibrarySortMode::OldestFirst.server_order(),
-            Some(crate::api_client::SortOrder::Asc)
-        ));
-        assert!(LibrarySortMode::Filename.server_order().is_none());
-        assert!(LibrarySortMode::FileType.server_order().is_none());
     }
 
     #[test]

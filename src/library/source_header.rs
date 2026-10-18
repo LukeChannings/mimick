@@ -9,9 +9,7 @@ use super::LibraryWindowUi;
 use super::asset_tags::color_dot;
 use super::dialogs::popover_menu;
 use super::explore_view::spawn_person_thumbnail;
-use super::header_format::{
-    album_details, capitalize, count_label, count_noun, owns_album, person_details,
-};
+use super::header_format::{album_details, capitalize, count_label, owns_album, person_details};
 use super::state::{LibrarySource, Location};
 use super::tree_page::{leaf_name, parent_path};
 
@@ -178,24 +176,23 @@ pub(super) fn show(ui: &Rc<LibraryWindowUi>, source: &LibrarySource) {
     render_facts(header);
     set_description(header, None);
     clear_actions(header);
-    let (leading, title) = basics(ui, source);
+    let Some((leading, title)) = basics(source) else {
+        // The Main library grid has no source header.
+        header.root.set_visible(false);
+        super::navigation::set_view_title(ui, "Photos");
+        return;
+    };
+    header.root.set_visible(true);
     set_leading(ui, leading);
     set_title(ui, &title);
     enrich(ui, source);
 }
 
-fn basics(ui: &LibraryWindowUi, source: &LibrarySource) -> (Leading, String) {
-    let icon = |name: &'static str, title: &str| (Leading::Icon(name), title.to_string());
+/// Icon and title for a source's header, or `None` when the source has no header.
+fn basics(source: &LibrarySource) -> Option<(Leading, String)> {
+    let icon = |name: &'static str, title: &str| Some((Leading::Icon(name), title.to_string()));
     match source {
-        LibrarySource::AllAssets | LibrarySource::Timeline | LibrarySource::Unified => {
-            if let Some(stats) = ui.ctx.library_state.lock().status.stats.clone() {
-                *ui.header.details.borrow_mut() = vec![
-                    count_noun(stats.images, "photo", "photos"),
-                    count_noun(stats.videos, "video", "videos"),
-                ];
-            }
-            icon("image-x-generic-symbolic", "Photos")
-        }
+        LibrarySource::AllAssets | LibrarySource::Unified => None,
         LibrarySource::LocalAll => icon("mimick-computer-symbolic", "On This Computer"),
         LibrarySource::Explore => icon("view-grid-symbolic", "Explore"),
         LibrarySource::Favorites => icon("mimick-heart-filled-symbolic", "Favorites"),
@@ -204,14 +201,16 @@ fn basics(ui: &LibraryWindowUi, source: &LibrarySource) -> (Leading, String) {
         LibrarySource::Album { name, .. }
         | LibrarySource::AlbumLocal { name, .. }
         | LibrarySource::AlbumUnified { name, .. } => icon("folder-pictures-symbolic", name),
-        LibrarySource::Person { id, name } => (
+        LibrarySource::Person { id, name } => Some((
             Leading::Person {
                 id: id.clone(),
                 name: name.clone(),
             },
             name.clone(),
-        ),
-        LibrarySource::Tag { name, .. } => (Leading::TagColor(None), leaf_name(name).to_string()),
+        )),
+        LibrarySource::Tag { name, .. } => {
+            Some((Leading::TagColor(None), leaf_name(name).to_string()))
+        }
         LibrarySource::Folder { path } => icon("folder-symbolic", leaf_name(path)),
         LibrarySource::Place { city } => icon("mark-location-symbolic", city),
         LibrarySource::Thing { query } => icon("system-search-symbolic", &capitalize(query)),
