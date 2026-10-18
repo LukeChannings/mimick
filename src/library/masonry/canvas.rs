@@ -17,6 +17,8 @@ type ActivateHandler = Rc<dyn Fn(u32)>;
 type SelectModeChanger = Rc<dyn Fn(bool)>;
 /// Receives the indices of unloaded sections intersecting the viewport band.
 type SectionDemandHandler = Rc<dyn Fn(Vec<usize>)>;
+/// Blocking hydration of a thin tile before drag-out names its file; false on failure.
+type DragHydrator = Rc<dyn Fn(&AssetObject) -> bool>;
 
 pub(super) const CORNER_RADIUS: f32 = 0.0;
 
@@ -45,14 +47,14 @@ mod imp {
     use gtk::subclass::prelude::*;
 
     use super::{
-        ActivateHandler, AssetContextMenuHandler, AssetObject, CORNER_RADIUS, GridQuality,
-        LaidItem, LaidRow, LaidSection, LayoutConfig, LibraryAssetModel, SECTION_LABEL_HEIGHT,
-        SECTION_LABEL_HEIGHT_NARROW, SectionDemandHandler, SectionInput, SelectModeChanger,
-        ThumbnailCache, ThumbnailSize, VIEWPORTS_AHEAD, VIEWPORTS_BEHIND, accent_bg_color,
-        anchor_delta, bucket_for_asset, bucket_for_row_height, cached_texture, collect_ratios,
-        finish_masonry_load, first_row_at_or_after, load_masonry_asset, load_target_for, pack_rows,
-        pack_sections, placeholder_color, resolve_symbolic_icon, resolve_video_icon,
-        sections_overlapping, stack_badge_geometry, stack_badge_icon_size,
+        ActivateHandler, AssetContextMenuHandler, AssetObject, CORNER_RADIUS, DragHydrator,
+        GridQuality, LaidItem, LaidRow, LaidSection, LayoutConfig, LibraryAssetModel,
+        SECTION_LABEL_HEIGHT, SECTION_LABEL_HEIGHT_NARROW, SectionDemandHandler, SectionInput,
+        SelectModeChanger, ThumbnailCache, ThumbnailSize, VIEWPORTS_AHEAD, VIEWPORTS_BEHIND,
+        accent_bg_color, anchor_delta, bucket_for_asset, bucket_for_row_height, cached_texture,
+        collect_ratios, finish_masonry_load, first_row_at_or_after, load_masonry_asset,
+        load_target_for, pack_rows, pack_sections, placeholder_color, resolve_symbolic_icon,
+        resolve_video_icon, sections_overlapping, stack_badge_geometry, stack_badge_icon_size,
     };
 
     pub(super) enum PaintResult {
@@ -134,6 +136,7 @@ mod imp {
         /// Inline label of each entry in `sections`.
         pub section_labels: RefCell<Vec<String>>,
         pub section_demand_handler: RefCell<Option<SectionDemandHandler>>,
+        pub drag_hydrator: RefCell<Option<DragHydrator>>,
         /// Last reported `(model epoch, unloaded sections in band)`, to report changes only.
         pub last_demand: RefCell<Option<(u64, Vec<usize>)>>,
     }

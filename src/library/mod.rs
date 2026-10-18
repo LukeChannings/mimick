@@ -68,6 +68,7 @@ mod download;
 mod features;
 mod folders_view;
 mod header_format;
+mod hydration;
 mod lightbox;
 mod main_library;
 mod nav_history;

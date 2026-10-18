@@ -426,6 +426,7 @@ struct AssetInfo {
     filename: String,
     local_path: String,
     mime: String,
+    asset_type: String,
     created: String,
     sync_state: u32,
     favorite: bool,
@@ -439,6 +440,7 @@ impl AssetInfo {
             filename: item.property("filename"),
             local_path: item.property("local-path"),
             mime: item.property("mime-type"),
+            asset_type: item.asset_type(),
             created: item.property("created-at"),
             sync_state: item.property("sync-state"),
             favorite: item.is_favorite(),
@@ -447,6 +449,10 @@ impl AssetInfo {
     }
 
     fn is_video(&self) -> bool {
+        // A thin tile whose hydration failed has no MIME type; its kind still does.
+        if self.mime.is_empty() {
+            return self.asset_type.eq_ignore_ascii_case("VIDEO");
+        }
         crate::media_kinds::asset_kind(&self.mime) == crate::media_kinds::AssetKind::Video
     }
 
@@ -470,6 +476,9 @@ struct Lightbox {
     // they were started for and skip UI writes if the user has navigated away
     // by the time their decode finishes (relevant for slow RAW files).
     load_gen: Cell<u64>,
+    // Increments on every render. A thin Main library tile hydrates before it
+    // renders; the hydration only renders if no newer render happened meanwhile.
+    render_gen: Cell<u64>,
     active_a: Cell<bool>,
     zoom_level: Cell<f64>,
     // -1 = back/prev (slide right), +1 = forward/next (slide left), 0 = no transition
@@ -932,6 +941,7 @@ impl Lightbox {
             details,
             pos: Cell::new(position),
             load_gen: Cell::new(0),
+            render_gen: Cell::new(0),
             active_a: Cell::new(true),
             zoom_level: Cell::new(1.0),
             nav_dir: Cell::new(0),
@@ -1154,9 +1164,16 @@ impl Lightbox {
                 return;
             };
             let asset_id = item.property::<String>("id");
-            if !asset_id.starts_with(LOCAL_ID_PREFIX) {
-                start_download(lb.ui.clone(), asset_id, item.property("filename"));
+            if asset_id.starts_with(LOCAL_ID_PREFIX) {
+                return;
             }
+            let ui = lb.ui.clone();
+            glib::MainContext::default().spawn_local(async move {
+                if let Err(err) = super::hydration::hydrate_object(&ui, &item).await {
+                    log::warn!("Could not load asset {} for download: {}", asset_id, err);
+                }
+                start_download(ui, asset_id, item.filename());
+            });
         });
 
         let lb = self.clone();
@@ -1534,13 +1551,35 @@ impl Lightbox {
         vadj.set_value(target_scroll_y);
     }
 
-    /// Show the asset at `pos`: title, details, action buttons, and picture.
+    /// Show the asset at `pos`. A thin Main library tile is hydrated first (its
+    /// filename and MIME type drive the title, video handling and original
+    /// download); the current picture stays up for that one round-trip.
     fn render(self: &Rc<Self>) {
-        let pos = self.pos.get();
-        let Some(item) = self.ui.grid.model.item(pos).and_downcast::<AssetObject>() else {
+        let generation = self.render_gen.get().wrapping_add(1);
+        self.render_gen.set(generation);
+        let Some(item) = self.current_item() else {
             return;
         };
-        let info = AssetInfo::from_item(&item);
+        if item.hydrated() || item.id().is_empty() {
+            self.render_item(&item);
+            return;
+        }
+        let lb = self.clone();
+        glib::MainContext::default().spawn_local(async move {
+            if let Err(err) = super::hydration::hydrate_object(&lb.ui, &item).await {
+                log::warn!("Lightbox: could not load asset {}: {}", item.id(), err);
+            }
+            // Superseded by a later render (navigation, toggle, edit): drop it.
+            if lb.render_gen.get() == generation {
+                lb.render_item(&item);
+            }
+        });
+    }
+
+    /// Title, details, action buttons, and picture for `item` (at `pos`).
+    fn render_item(self: &Rc<Self>, item: &AssetObject) {
+        let pos = self.pos.get();
+        let info = AssetInfo::from_item(item);
 
         self.header.page.set_title(&truncate_filename(
             &info.filename,

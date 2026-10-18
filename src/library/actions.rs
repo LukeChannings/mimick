@@ -114,13 +114,24 @@ pub(super) fn connect_bulk_actions(
         #[strong]
         ui,
         move |_| {
-            let downloads: Vec<(String, String)> = collect_selected_assets(&ui)
+            let items: Vec<AssetObject> = selected_items(&ui)
                 .into_iter()
-                .filter(|(asset_id, _)| !asset_id.starts_with(LOCAL_ID_PREFIX))
+                .filter(|item| !item.id().starts_with(LOCAL_ID_PREFIX))
                 .collect();
-            if !downloads.is_empty() {
-                start_download_group(ui.clone(), downloads);
+            if items.is_empty() {
+                return;
             }
+            // Downloads are saved under their real filenames: thin Main library
+            // tiles hydrate first (a no-op for every other source).
+            let ui = ui.clone();
+            glib::MainContext::default().spawn_local(async move {
+                super::hydration::hydrate_objects(&ui, &items).await;
+                let downloads = items
+                    .iter()
+                    .map(|item| (item.id(), item.filename()))
+                    .collect();
+                start_download_group(ui.clone(), downloads);
+            });
         }
     ));
 
@@ -199,18 +210,6 @@ pub(super) fn selection_count(selection: &gtk::MultiSelection) -> u32 {
     bitset.size() as u32
 }
 
-pub(super) fn collect_selected_assets(ui: &Rc<LibraryWindowUi>) -> Vec<(String, String)> {
-    selected_items(ui)
-        .iter()
-        .map(|item| {
-            (
-                item.property::<String>("id"),
-                item.property::<String>("filename"),
-            )
-        })
-        .collect()
-}
-
 pub(super) fn selected_items(ui: &Rc<LibraryWindowUi>) -> Vec<AssetObject> {
     let bitset = ui.grid.selection.selection();
     let mut out = Vec::new();
@@ -264,9 +263,15 @@ fn trash_dialog_text(
     skipped_local: usize,
     trash: bool,
 ) -> (String, String) {
+    // Trash works on IDs only, so thin (unhydrated) Main library tiles have no
+    // filename to quote.
     let heading = match (targets, trash) {
+        ([single], true) if single.filename.is_empty() => "Move this item to trash?".to_string(),
         ([single], true) => format!("Move “{}” to trash?", single.filename),
         (_, true) => format!("Move {} items to trash?", targets.len()),
+        ([single], false) if single.filename.is_empty() => {
+            "Delete this item permanently?".to_string()
+        }
         ([single], false) => format!("Delete “{}” permanently?", single.filename),
         (_, false) => format!("Delete {} items permanently?", targets.len()),
     };
@@ -437,6 +442,14 @@ mod tests {
         let (heading, body) = trash_dialog_text(&[target("IMG_1.jpg", false)], 0, true);
         assert_eq!(heading, "Move “IMG_1.jpg” to trash?");
         assert_eq!(body, "Items can be restored from the Immich trash.");
+    }
+
+    #[test]
+    fn single_thin_tile_heading_does_not_quote_an_empty_name() {
+        let (heading, _) = trash_dialog_text(&[target("", false)], 0, true);
+        assert_eq!(heading, "Move this item to trash?");
+        let (heading, _) = trash_dialog_text(&[target("", false)], 0, false);
+        assert_eq!(heading, "Delete this item permanently?");
     }
 
     #[test]

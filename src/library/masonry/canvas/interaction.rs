@@ -90,6 +90,12 @@ impl MasonryCanvas {
         *self.imp().section_demand_handler.borrow_mut() = Some(Rc::new(f));
     }
 
+    /// Drag-out hydrates thin tiles through `f` (blocking) so exported files carry
+    /// their real names. Without one, thin tiles cannot be dragged out.
+    pub fn set_drag_hydrator(&self, f: impl Fn(&AssetObject) -> bool + 'static) {
+        *self.imp().drag_hydrator.borrow_mut() = Some(Rc::new(f));
+    }
+
     /// Label of the month section under the viewport midpoint (sectioned models only).
     pub fn section_label_at_viewport_center(&self) -> Option<String> {
         self.imp().label_at_viewport_center()
@@ -206,12 +212,14 @@ fn collect_drag_files(
     let imp = canvas.imp();
     let sel = imp.selection.get()?;
     let model = imp.model.get()?;
+    let hydrator = imp.drag_hydrator.borrow().clone();
+    let hydrator = hydrator.as_deref();
     let mut files = Vec::new();
 
     if imp.select_mode.get() {
         for i in 0..sel.n_items() {
             if sel.is_selected(i)
-                && let Some(path) = resolve_drag_path(model, i, ctx)
+                && let Some(path) = resolve_drag_path(model, i, ctx, hydrator)
             {
                 files.push(gtk::gio::File::for_path(&path));
             }
@@ -220,7 +228,7 @@ fn collect_drag_files(
 
     if files.is_empty() {
         let pos = canvas.hit_test(x, y)?;
-        let path = resolve_drag_path(model, pos, ctx)?;
+        let path = resolve_drag_path(model, pos, ctx, hydrator)?;
         files.push(gtk::gio::File::for_path(&path));
     }
 
@@ -372,8 +380,17 @@ fn resolve_drag_path(
     model: &LibraryAssetModel,
     pos: u32,
     ctx: &AppContext,
+    hydrator: Option<&dyn Fn(&AssetObject) -> bool>,
 ) -> Option<std::path::PathBuf> {
     let obj = model.item(pos).and_downcast::<AssetObject>()?;
+    if obj.id().is_empty() {
+        return None;
+    }
+    // A thin Main library tile has no filename (and may have an unmatched local
+    // copy) until hydrated.
+    if !obj.hydrated() && !hydrator.is_some_and(|hydrate| hydrate(&obj)) {
+        return None;
+    }
     let local_path = obj.property::<String>("local-path");
     if !local_path.is_empty() {
         let p = std::path::PathBuf::from(&local_path);

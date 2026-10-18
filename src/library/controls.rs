@@ -382,22 +382,42 @@ pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
         else {
             return;
         };
-        let asset_id = item.property::<String>("id");
-        let filename = item.property::<String>("filename");
-        let local_path = item.property::<String>("local-path");
-        let asset_type = item.property::<String>("asset-type");
-
-        // Videos open in the system default player.
-        if asset_type.eq_ignore_ascii_case("VIDEO") {
-            if !local_path.is_empty() {
-                open_local_with_default_app(&local_path);
-            } else {
-                spawn_video_handoff(ui_for_activate.clone(), asset_id, filename);
-            }
+        // Videos open in the system default player, which needs the real filename:
+        // a thin Main library tile hydrates first (one round-trip).
+        if item.asset_type().eq_ignore_ascii_case("VIDEO") {
+            let ui = ui_for_activate.clone();
+            glib::MainContext::default().spawn_local(async move {
+                if let Err(err) = super::hydration::hydrate_object(&ui, &item).await {
+                    log::warn!("Could not load video {}: {}", item.id(), err);
+                    super::context_menu::show_alert_dialog(&ui, "Could Not Play Video", &err);
+                    return;
+                }
+                let local_path = item.local_path();
+                if !local_path.is_empty() {
+                    open_local_with_default_app(&local_path);
+                } else {
+                    spawn_video_handoff(ui.clone(), item.id(), item.filename());
+                }
+            });
             return;
         }
 
         open_lightbox(ui_for_activate.clone(), position);
+    });
+
+    // Drag-out names exported files: thin Main library tiles hydrate first.
+    let ui_for_drag = Rc::downgrade(&ui);
+    ui.grid.canvas.set_drag_hydrator(move |item| {
+        let Some(ui) = ui_for_drag.upgrade() else {
+            return false;
+        };
+        match super::hydration::hydrate_object_blocking(&ui, item) {
+            Ok(()) => true,
+            Err(err) => {
+                log::warn!("Drag export: could not load asset {}: {}", item.id(), err);
+                false
+            }
+        }
     });
 
     let ui_for_demand = ui.clone();

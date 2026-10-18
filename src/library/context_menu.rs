@@ -83,7 +83,36 @@ pub(super) fn show_asset_context_menu(
     let Some(item) = ui.grid.model.item(position).and_downcast::<AssetObject>() else {
         return;
     };
-    let asset = MenuAsset::from_item(&item);
+    if item.id().is_empty() {
+        return;
+    }
+    if item.hydrated() {
+        build_asset_context_menu(ui, parent.upcast_ref(), &item, x, y, hooks);
+        return;
+    }
+    // Copy, Open In, Download and Edit Info all name the file: a thin Main library
+    // tile hydrates before the menu is built, so every action sees the real record.
+    let parent = parent.upcast_ref::<gtk::Widget>().clone();
+    glib::MainContext::default().spawn_local(async move {
+        match super::hydration::hydrate_object(&ui, &item).await {
+            Ok(()) => build_asset_context_menu(ui, &parent, &item, x, y, hooks),
+            Err(err) => {
+                log::warn!("Could not load asset {} for its menu: {}", item.id(), err);
+                show_alert_dialog(&ui, "Could Not Load Asset", &err);
+            }
+        }
+    });
+}
+
+fn build_asset_context_menu(
+    ui: Rc<LibraryWindowUi>,
+    parent: &gtk::Widget,
+    item: &AssetObject,
+    x: f64,
+    y: f64,
+    hooks: AssetMenuHooks,
+) {
+    let asset = MenuAsset::from_item(item);
     let is_image = item
         .property::<String>("asset-type")
         .eq_ignore_ascii_case("IMAGE");
@@ -109,7 +138,7 @@ pub(super) fn show_asset_context_menu(
         });
     }
     if asset.on_server() {
-        append_manage_buttons(&menu, &ui, &item, hooks);
+        append_manage_buttons(&menu, &ui, item, hooks);
     }
 
     menu.popover.set_child(Some(&menu.content));

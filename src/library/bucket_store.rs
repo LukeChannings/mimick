@@ -210,6 +210,22 @@ impl BucketStore {
     pub fn hydrated(&self) -> &HashMap<String, LibraryAsset> {
         &self.hydrated
     }
+
+    /// The cached full record for `id`, if it has been hydrated.
+    pub fn hydrated_asset(&self, id: &str) -> Option<LibraryAsset> {
+        self.hydrated.get(id).cloned()
+    }
+
+    /// Cache one on-interaction hydration fetched during `generation`. False (and
+    /// no change) if the listing was refreshed or left meanwhile: the record
+    /// may predate the refresh, which exists to drop stale records.
+    pub fn cache_hydrated(&mut self, generation: u64, asset: LibraryAsset) -> bool {
+        if !self.is_current(generation) {
+            return false;
+        }
+        self.hydrated.insert(asset.id.clone(), asset);
+        true
+    }
 }
 
 /// `(takenAfter, takenBefore)` for hydrating a bucket via `search/metadata`: the
@@ -427,6 +443,25 @@ mod tests {
         assert!(store.hydrated().is_empty());
         assert!(store.unified);
         assert_eq!(store.leading, 1);
+    }
+
+    #[test]
+    fn hydrations_cache_only_into_the_listing_they_started_in() {
+        let mut store = store();
+        assert!(store.hydrated_asset("a").is_none());
+        assert!(store.cache_hydrated(7, full("a")));
+        assert_eq!(
+            store.hydrated_asset("a").map(|a| a.filename),
+            Some("a.jpg".to_string())
+        );
+        // Fetched before a refresh, landing after it: dropped.
+        assert!(!store.cache_hydrated(6, full("b")));
+        store.begin(8, &[bucket("2025-06-01", 3)], false, 0);
+        assert!(store.hydrated_asset("a").is_none());
+        assert!(!store.cache_hydrated(7, full("c")));
+        store.deactivate();
+        assert!(!store.cache_hydrated(8, full("d")));
+        assert!(store.hydrated().is_empty());
     }
 
     #[test]
