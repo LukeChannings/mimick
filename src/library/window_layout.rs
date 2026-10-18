@@ -248,6 +248,7 @@ impl LibraryWindowUi {
             last_seen_upload_batch: Cell::new(0),
             split: parts.split,
             drop_overlay: parts.drop_overlay,
+            buckets: std::cell::RefCell::default(),
         }
     }
 }

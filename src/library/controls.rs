@@ -400,6 +400,11 @@ pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
         open_lightbox(ui_for_activate.clone(), position);
     });
 
+    let ui_for_demand = ui.clone();
+    ui.grid.canvas.set_section_demand_handler(move |sections| {
+        super::main_library::on_sections_demanded(&ui_for_demand, sections);
+    });
+
     let scroll_pending = Rc::new(std::cell::Cell::new(false));
     ui.grid.scrolled.vadjustment().connect_value_changed(clone!(
         #[strong]
@@ -415,8 +420,12 @@ pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
             glib::idle_add_local_once(move || {
                 scroll_pending.set(false);
                 let adj = ui.grid.scrolled.vadjustment();
-                update_timeline_banner_if_active(&ui, &adj);
+                update_timeline_banner_if_active(&ui);
 
+                // The Main library loads buckets from the viewport, not by paging.
+                if ui.grid.model.is_sectioned() {
+                    return;
+                }
                 let threshold = (adj.upper() - adj.page_size()) * 0.50;
                 if adj.value() < threshold {
                     return;

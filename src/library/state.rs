@@ -272,6 +272,22 @@ impl LibraryState {
         true
     }
 
+    /// The Main library's bucket list arrived. Buckets load on demand from then on,
+    /// so there is no next page; `empty` when the library has no buckets at all.
+    pub fn finish_bucket_listing(&mut self, generation: u64, empty: bool) -> bool {
+        if generation != self.generation {
+            return false;
+        }
+        self.page_in_flight = false;
+        self.has_more = false;
+        self.load_state = if empty {
+            LibraryLoadState::Empty
+        } else {
+            LibraryLoadState::Loaded
+        };
+        true
+    }
+
     pub fn clear_search_restore_previous_source(&mut self) -> Option<(u64, LibrarySource, u32)> {
         if self.source.is_search() {
             Some(self.switch_source(self.previous_non_search_source.clone()))
@@ -386,6 +402,22 @@ mod tests {
             state.assets.iter().map(|a| a.id.clone()).collect();
         assert_eq!(unique.len(), state.assets.len());
         assert_eq!(state.assets.len(), 100);
+    }
+
+    #[test]
+    fn test_bucket_listing_ends_paging_and_ignores_stale_generations() {
+        let mut state = LibraryState::new();
+        let (generation, _, _) = state.load_initial_source();
+        assert!(!state.finish_bucket_listing(generation + 1, false));
+        assert_eq!(state.load_state, LibraryLoadState::Loading);
+
+        assert!(state.finish_bucket_listing(generation, false));
+        assert_eq!(state.load_state, LibraryLoadState::Loaded);
+        assert!(state.load_next_page_if_needed().is_none());
+
+        let (generation, _, _) = state.switch_source(LibrarySource::Unified);
+        assert!(state.finish_bucket_listing(generation, true));
+        assert_eq!(state.load_state, LibraryLoadState::Empty);
     }
 
     #[test]

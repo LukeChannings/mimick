@@ -43,6 +43,7 @@ mod archive;
 pub mod asset_model;
 pub mod asset_object;
 mod bottom_nav;
+pub mod bucket_store;
 pub mod explore_view;
 mod favorites;
 pub mod local_exif;
@@ -68,6 +69,7 @@ mod features;
 mod folders_view;
 mod header_format;
 mod lightbox;
+mod main_library;
 mod nav_history;
 mod navigation;
 mod people_view;
@@ -151,6 +153,8 @@ struct LibraryWindowUi {
     last_seen_upload_batch: Cell<u64>,
     split: libadwaita::OverlaySplitView,
     drop_overlay: gtk::Revealer,
+    /// Main library bucket state (see `main_library.rs`).
+    buckets: RefCell<bucket_store::BucketStore>,
 }
 
 /// Build and display the main library window application layout.
@@ -755,9 +759,9 @@ fn search_by_tag(ui: Rc<LibraryWindowUi>, tag: Tag) {
 }
 
 fn apply_source_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
-    // The month-year banner follows the Main library until the bucket grid rewires it.
+    // The month-year banner follows the Main library's month sections.
     ui.timeline_banner
-        .set_visible(matches!(source, LibrarySource::AllAssets));
+        .set_visible(main_library::is_main_library(source));
 
     let is_local = matches!(
         source,
@@ -807,49 +811,9 @@ fn apply_source_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     refresh_album_link_row(ui, source);
 }
 
-/// Compute and refresh the month-year overlay text dynamically while scrubbing the timeline list.
-fn update_timeline_banner_if_active(ui: &Rc<LibraryWindowUi>, adj: &gtk::Adjustment) {
-    let state = ui.ctx.library_state.lock();
-    if !matches!(state.source, LibrarySource::AllAssets) {
-        return;
-    }
-    if state.assets.is_empty() {
-        ui.timeline_banner.set_label("");
-        return;
-    }
-
-    let max = (adj.upper() - adj.page_size()).max(1.0);
-    let frac = (adj.value() / max).clamp(0.0, 1.0);
-    let idx = ((state.assets.len() as f64) * frac) as usize;
-    let idx = idx.min(state.assets.len() - 1);
-    let label = month_year_label(&state.assets[idx].created_at);
-    ui.timeline_banner.set_label(&label);
-}
-
-/// Convert an ISO 8601 string to a human-readable "Month Year" label.
-fn month_year_label(iso: &str) -> String {
-    use chrono::{DateTime, Datelike};
-    if let Ok(dt) = DateTime::parse_from_rfc3339(iso) {
-        const MONTHS: [&str; 12] = [
-            "January",
-            "February",
-            "March",
-            "April",
-            "May",
-            "June",
-            "July",
-            "August",
-            "September",
-            "October",
-            "November",
-            "December",
-        ];
-        let m = dt.month0() as usize;
-        if let Some(name) = MONTHS.get(m) {
-            return format!("{} {}", name, dt.year());
-        }
-    }
-    iso.chars().take(7).collect()
+/// Refresh the month-year banner from the section under the viewport midpoint.
+fn update_timeline_banner_if_active(ui: &Rc<LibraryWindowUi>) {
+    main_library::update_banner(ui);
 }
 
 /// Retrieve albums from the API and update the side navigation sidebar entries.
@@ -1044,7 +1008,12 @@ fn open_asset_in_lightbox(ui: Rc<LibraryWindowUi>, asset_id: String) {
 }
 
 /// Load a paginated subset of assets for the current source.
+/// The Main library instead loads its bucket list, and buckets on demand (ADR 0001).
 fn load_source_page(ui: Rc<LibraryWindowUi>, request: (u64, LibrarySource, u32), append: bool) {
+    let main_library = main_library::is_main_library(&request.1);
+    if !main_library {
+        ui.buckets.borrow_mut().deactivate();
+    }
     if matches!(request.1, LibrarySource::Explore) {
         load_explore_landing(ui);
         return;
@@ -1052,6 +1021,12 @@ fn load_source_page(ui: Rc<LibraryWindowUi>, request: (u64, LibrarySource, u32),
     if !append && !navigation::on_page(&ui) {
         source_header::set_status(&ui, "loading", None);
         ui.content_stack.set_visible_child_name("grid");
+    }
+    if main_library {
+        if !append {
+            main_library::load(ui, request.0, request.1);
+        }
+        return;
     }
     log::debug!("Loading library source {:?} page={}", request.1, request.2);
     glib::MainContext::default().spawn_local(clone!(
@@ -1125,10 +1100,6 @@ fn remote_filters(
     order: Option<SortOrder>,
 ) -> Option<MetadataSearchFilters> {
     let base = match source {
-        LibrarySource::AllAssets => MetadataSearchFilters {
-            visibility: Some("timeline".to_string()),
-            ..MetadataSearchFilters::default()
-        },
         LibrarySource::Archive => MetadataSearchFilters {
             visibility: Some("archive".to_string()),
             ..MetadataSearchFilters::default()
@@ -1191,19 +1162,9 @@ async fn fetch_unified_page(
 ) -> PageResult {
     let api = &ui.ctx.api_client;
     match source {
-        LibrarySource::Unified => {
-            let remote = api
-                .search_metadata_with_filters(
-                    &remote_filters(&LibrarySource::AllAssets, order).unwrap_or_default(),
-                    page,
-                    PAGE_SIZE,
-                )
-                .await;
-            merge_unified_page(remote, page, ui, None).await
-        }
         LibrarySource::UnifiedSearch { query } => {
             let remote = api.search_metadata(&query, page, PAGE_SIZE, order).await;
-            merge_unified_page(remote, page, ui, Some(&query)).await
+            merge_unified_page(remote, page, ui, &query).await
         }
         LibrarySource::AlbumUnified { id, name } => {
             let remote = api.fetch_album_assets(&id, page, PAGE_SIZE, order).await;
@@ -1250,7 +1211,7 @@ fn apply_page_result(ui: &Rc<LibraryWindowUi>, generation: u64, append: bool, re
     // triggered by the stack transition can safely re-acquire library_state.
     sync_content_state(ui);
     reload_sidebar(ui);
-    update_timeline_banner_if_active(ui, &ui.grid.scrolled.vadjustment());
+    update_timeline_banner_if_active(ui);
 }
 
 fn setup_album_drop_target(
@@ -1553,22 +1514,20 @@ fn local_to_library_asset(local: LocalAsset) -> LibraryAsset {
     }
 }
 
-/// Merge a page of remote API assets with local files that haven't been synchronized yet.
+/// Merge a page of remote search results with matching local files that haven't
+/// been synchronized yet (Unified search; the Unified Main library is bucket-backed).
 async fn merge_unified_page(
     remote: Result<(Vec<LibraryAsset>, bool), String>,
     page: u32,
     ui: &Rc<LibraryWindowUi>,
-    query: Option<&str>,
+    query: &str,
 ) -> Result<(Vec<LibraryAsset>, bool), String> {
     let (mut remote, has_more) = remote?;
     if page > 1 {
         return Ok((remote, has_more));
     }
 
-    let mut locals = enumerate_local(ui.ctx.clone()).await;
-    if let Some(q) = query {
-        locals = filter_by_filename(locals, q);
-    }
+    let locals = filter_by_filename(enumerate_local(ui.ctx.clone()).await, query);
 
     let synced_paths: std::collections::HashSet<String> = {
         remote

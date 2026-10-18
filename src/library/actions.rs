@@ -219,7 +219,10 @@ pub(super) fn selected_items(ui: &Rc<LibraryWindowUi>) -> Vec<AssetObject> {
     };
     let mut pos = Some(first);
     while let Some(p) = pos {
-        if let Some(item) = ui.grid.model.item(p).and_downcast::<AssetObject>() {
+        // Unloaded Main library slots are placeholders with no id: nothing to act on.
+        if let Some(item) = ui.grid.model.item(p).and_downcast::<AssetObject>()
+            && !item.id().is_empty()
+        {
             out.push(item);
         }
         pos = iter.next();
@@ -343,6 +346,10 @@ async fn trash_assets(ui: &Rc<LibraryWindowUi>, ids: &[String]) -> Result<(), St
 /// Drop assets from the grid in place, so open views (like the lightbox) keep their
 /// position instead of reloading from the first page; then refresh album/stat counts.
 pub(super) fn remove_assets_from_grid(ui: &Rc<LibraryWindowUi>, ids: &[String]) {
+    if super::main_library::remove_ids(ui, ids) {
+        super::refresh_library_after_mutation(ui.clone(), false);
+        return;
+    }
     let assets = {
         let mut state = ui.ctx.library_state.lock();
         state.assets.retain(|asset| !ids.contains(&asset.id));

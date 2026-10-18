@@ -487,6 +487,9 @@ struct Lightbox {
     // A capture date was edited: reload the grid when the lightbox closes, since the
     // asset's timeline position moved (reloading now would shift the open photo).
     reload_on_close: Cell<bool>,
+    // A step onto a Main library tile whose bucket is still loading: the model
+    // handler that completes it once the bucket fills (see `show_when_loaded`).
+    pending_step: Rc<RefCell<Option<glib::SignalHandlerId>>>,
 }
 
 /// Construct and present the fullscreen lightbox view for a selected asset.
@@ -939,6 +942,7 @@ impl Lightbox {
             video_badge_target: RefCell::new(None),
             drag_path: RefCell::new(None),
             reload_on_close: Cell::new(false),
+            pending_step: Rc::default(),
         })
     }
 
@@ -1236,7 +1240,8 @@ impl Lightbox {
         if self.pos.get() >= n {
             self.pos.set(n - 1);
         }
-        self.render();
+        // The next photo may sit in a Main library bucket that has not loaded yet.
+        self.step_to(self.pos.get(), 0);
     }
 
     fn edit_current(self: &Rc<Self>) {
@@ -1373,9 +1378,7 @@ impl Lightbox {
     fn goto_prev(self: &Rc<Self>) {
         let pos = self.pos.get();
         if pos > 0 {
-            self.pos.set(pos - 1);
-            self.nav_dir.set(-1);
-            self.render();
+            self.step_to(pos - 1, -1);
         }
     }
 
@@ -1383,9 +1386,7 @@ impl Lightbox {
     fn goto_next(self: &Rc<Self>) {
         let pos = self.pos.get();
         if pos + 1 < self.ui.grid.model.n_items() {
-            self.pos.set(pos + 1);
-            self.nav_dir.set(1);
-            self.render();
+            self.step_to(pos + 1, 1);
             return;
         }
         let next_request = self.ui.ctx.library_state.lock().load_next_page_if_needed();
@@ -1395,6 +1396,57 @@ impl Lightbox {
         self.header.next_btn.set_sensitive(false);
         self.advance_when_page_loads();
         load_source_page(self.ui.clone(), req, true);
+    }
+
+    /// Show grid position `target`. In the Main library its bucket may not have
+    /// loaded yet (the grid only fetches what it scrolls past): fetch it and finish
+    /// the step when it lands, rather than showing an empty slot.
+    fn step_to(self: &Rc<Self>, target: u32, dir: i8) {
+        self.cancel_pending_step();
+        if super::main_library::ensure_loaded(&self.ui, target) {
+            self.show_when_loaded(target, dir);
+            return;
+        }
+        self.pos.set(target);
+        self.nav_dir.set(dir);
+        self.render();
+    }
+
+    /// One-shot: render `target` once its slot holds a real tile, unless the user
+    /// navigated elsewhere meanwhile. A failed bucket fetch leaves the current photo
+    /// up; stepping again retries it.
+    fn show_when_loaded(self: &Rc<Self>, target: u32, dir: i8) {
+        let from = self.pos.get();
+        let weak = Rc::downgrade(self);
+        let pending = self.pending_step.clone();
+        let id = self
+            .ui
+            .grid
+            .model
+            .connect_items_changed(move |model, _, _, _| {
+                let lb = weak.upgrade();
+                if lb.is_some() && model.is_placeholder(target) {
+                    return;
+                }
+                if let Some(id) = pending.borrow_mut().take() {
+                    model.disconnect(id);
+                }
+                let Some(lb) = lb else {
+                    return;
+                };
+                if lb.pos.get() == from && target < model.n_items() {
+                    lb.pos.set(target);
+                    lb.nav_dir.set(dir);
+                    lb.render();
+                }
+            });
+        *self.pending_step.borrow_mut() = Some(id);
+    }
+
+    fn cancel_pending_step(&self) {
+        if let Some(id) = self.pending_step.borrow_mut().take() {
+            self.ui.grid.model.disconnect(id);
+        }
     }
 
     /// Advance once the next page lands in the grid model, then drop the handler.

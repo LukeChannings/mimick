@@ -68,6 +68,11 @@ mod imp {
 
         #[property(get, set)]
         is_archived: Cell<bool>,
+
+        /// Width / height as served by the timeline bucket API; 0 = unknown
+        /// (layout then derives it from `width` / `height`).
+        #[property(get, set)]
+        ratio: Cell<f64>,
     }
 
     #[glib::object_subclass]
@@ -102,6 +107,24 @@ pub struct AssetInit<'a> {
 }
 
 impl AssetObject {
+    /// Stand-in for an unloaded Main library slot. Its id is empty, which every
+    /// consumer treats as "nothing here".
+    pub fn placeholder() -> Self {
+        glib::Object::builder()
+            .property("asset-type", "IMAGE")
+            .build()
+    }
+
+    /// Width / height used by the grid layout.
+    pub fn layout_ratio(&self) -> f32 {
+        let ratio = self.ratio();
+        if ratio.is_finite() && ratio > 0.0 {
+            ratio as f32
+        } else {
+            crate::library::masonry::layout::aspect(self.width(), self.height())
+        }
+    }
+
     pub fn new(init: AssetInit<'_>) -> Self {
         glib::Object::builder()
             .property("id", init.id)

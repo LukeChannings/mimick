@@ -84,6 +84,17 @@ impl MasonryCanvas {
         *self.imp().select_mode_changer.borrow_mut() = Some(Rc::new(f));
     }
 
+    /// Called (from idle) with the indices of the model's unloaded sections that
+    /// intersect the viewport band, whenever that set changes.
+    pub fn set_section_demand_handler(&self, f: impl Fn(Vec<usize>) + 'static) {
+        *self.imp().section_demand_handler.borrow_mut() = Some(Rc::new(f));
+    }
+
+    /// Label of the month section under the viewport midpoint (sectioned models only).
+    pub fn section_label_at_viewport_center(&self) -> Option<String> {
+        self.imp().label_at_viewport_center()
+    }
+
     fn hit_test(&self, x: f64, y: f64) -> Option<u32> {
         let rows = self.imp().rows.borrow();
         let r = row_at_y(&rows, y as f32)?;
@@ -288,17 +299,15 @@ fn handle_model_changed(
     if added == 0 && removed > 0 && model.n_items() == 0 {
         return;
     }
-    imp.invalidate_layout();
+    imp.relayout();
     canvas.queue_draw();
 }
 
 fn retain_failed_ids_for_model(imp: &imp::MasonryCanvas, model: &LibraryAssetModel) {
-    let mut current_ids: HashSet<String> = HashSet::with_capacity(model.n_items() as usize);
-    for i in 0..model.n_items() {
-        if let Some(obj) = model.item(i).and_downcast::<AssetObject>() {
-            current_ids.insert(obj.property::<String>("id"));
-        }
+    if imp.failed.borrow().is_empty() {
+        return;
     }
+    let current_ids: HashSet<String> = model.loaded_objects().iter().map(AssetObject::id).collect();
     imp.failed
         .borrow_mut()
         .retain(|id| current_ids.contains(id));

@@ -4,8 +4,6 @@
 //! returns one month's assets in a **columnar** layout (one array per field). Both
 //! require Immich >= 1.133 (see [`supports_timeline_buckets`]). See ADR 0001.
 //!
-//! Consumed by the virtual grid in later phases; nothing in the UI calls this yet.
-#![allow(dead_code)]
 
 use std::time::Duration;
 

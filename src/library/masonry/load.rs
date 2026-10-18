@@ -3,7 +3,7 @@
 //! `load_with_fallback` consults the shared `ThumbnailCache`, walking the
 //! `quality::fallback_bucket` chain on 404 so opt-in server features (e.g.
 //! fullsize generation) degrade gracefully to whatever the server has.
-//! `collect_dims` / `propagate_dimensions` keep the layout's `(w, h)` view
+//! `collect_ratios` / `propagate_dimensions` keep the layout's aspect-ratio view
 //! of each asset in sync with what eventually decodes.
 
 use gdk4::Texture;
@@ -11,21 +11,12 @@ use gtk::prelude::*;
 
 use crate::api_client::ThumbnailSize;
 use crate::library::asset_model::LibraryAssetModel;
-use crate::library::asset_object::AssetObject;
 use crate::library::masonry::quality::fallback_bucket;
 use crate::library::thumbnail_cache::ThumbnailCache;
 
-pub(crate) fn collect_dims(model: &LibraryAssetModel) -> Vec<(u32, u32)> {
-    let n = model.n_items();
-    let mut out = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        if let Some(obj) = model.item(i).and_downcast::<AssetObject>() {
-            out.push((obj.property::<u32>("width"), obj.property::<u32>("height")));
-        } else {
-            out.push((0, 0));
-        }
-    }
-    out
+/// Layout ratio of every slot in the model.
+pub(crate) fn collect_ratios(model: &LibraryAssetModel) -> Vec<f32> {
+    model.ratios(0..model.n_items())
 }
 
 /// Try requested bucket, then walk `fallback_bucket` chain on 404. Only the
@@ -62,25 +53,20 @@ pub(crate) async fn load_with_fallback<F: Fn() -> bool>(
 }
 
 /// Returns true if the AssetObject dimensions were filled in (relayout needed).
+/// Assets with a server-provided ratio (Main library tiles) already lay out
+/// exactly, so their decode never triggers a relayout.
 pub(crate) fn propagate_dimensions(
     model: &LibraryAssetModel,
     asset_id: &str,
     tex: &Texture,
 ) -> bool {
-    let n = model.n_items();
-    for i in 0..n {
-        if let Some(obj) = model.item(i).and_downcast::<AssetObject>()
-            && obj.property::<String>("id") == asset_id
-        {
-            let w = obj.property::<u32>("width");
-            let h = obj.property::<u32>("height");
-            if w == 0 || h == 0 {
-                obj.set_property("width", tex.width() as u32);
-                obj.set_property("height", tex.height() as u32);
-                return true;
-            }
-            return false;
-        }
+    let Some(obj) = model.find_by_id(asset_id) else {
+        return false;
+    };
+    if obj.width() != 0 && obj.height() != 0 {
+        return false;
     }
-    false
+    obj.set_width(tex.width() as u32);
+    obj.set_height(tex.height() as u32);
+    obj.ratio() <= 0.0
 }

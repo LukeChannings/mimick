@@ -15,6 +15,8 @@ use crate::library::thumbnail_cache::ThumbnailCache;
 
 type ActivateHandler = Rc<dyn Fn(u32)>;
 type SelectModeChanger = Rc<dyn Fn(bool)>;
+/// Receives the indices of unloaded sections intersecting the viewport band.
+type SectionDemandHandler = Rc<dyn Fn(Vec<usize>)>;
 
 pub(super) const CORNER_RADIUS: f32 = 0.0;
 
@@ -22,7 +24,9 @@ const VIEWPORTS_BEHIND: f32 = 2.0;
 const VIEWPORTS_AHEAD: f32 = 4.0;
 
 use super::layout::{
-    LaidItem, LaidRow, LayoutConfig, first_row_at_or_after, item_at_x, pack_rows, row_at_y,
+    LaidItem, LaidRow, LaidSection, LayoutConfig, SECTION_LABEL_HEIGHT,
+    SECTION_LABEL_HEIGHT_NARROW, SectionInput, anchor_delta, first_row_at_or_after, item_at_x,
+    pack_rows, pack_sections, row_at_y, section_at_y, sections_overlapping,
 };
 pub use super::quality::GridQuality;
 use super::quality::{bucket_for_row_height, fallback_bucket};
@@ -42,11 +46,13 @@ mod imp {
 
     use super::{
         ActivateHandler, AssetContextMenuHandler, AssetObject, CORNER_RADIUS, GridQuality,
-        LaidItem, LaidRow, LayoutConfig, LibraryAssetModel, SelectModeChanger, ThumbnailCache,
-        ThumbnailSize, VIEWPORTS_AHEAD, VIEWPORTS_BEHIND, accent_bg_color, bucket_for_asset,
-        bucket_for_row_height, cached_texture, collect_dims, finish_masonry_load,
-        first_row_at_or_after, load_masonry_asset, load_target_for, pack_rows, placeholder_color,
-        resolve_symbolic_icon, resolve_video_icon,
+        LaidItem, LaidRow, LaidSection, LayoutConfig, LibraryAssetModel, SECTION_LABEL_HEIGHT,
+        SECTION_LABEL_HEIGHT_NARROW, SectionDemandHandler, SectionInput, SelectModeChanger,
+        ThumbnailCache, ThumbnailSize, VIEWPORTS_AHEAD, VIEWPORTS_BEHIND, accent_bg_color,
+        anchor_delta, bucket_for_asset, bucket_for_row_height, cached_texture, collect_ratios,
+        finish_masonry_load, first_row_at_or_after, load_masonry_asset, load_target_for, pack_rows,
+        pack_sections, placeholder_color, resolve_symbolic_icon, resolve_video_icon,
+        sections_overlapping,
     };
 
     pub(super) enum PaintResult {
@@ -69,7 +75,7 @@ mod imp {
         pub(super) painted: usize,
     }
 
-    struct SnapshotViewport {
+    pub(super) struct SnapshotViewport {
         scroll_y: f32,
         center: f32,
         top: f32,
@@ -121,6 +127,13 @@ mod imp {
         pub border_gap: Cell<f32>,
         /// Color painted behind tiles so the gap appears as a border.
         pub border_color: Cell<Option<gdk4::RGBA>>,
+        /// Laid-out month sections (Main library only; empty for flat sources).
+        pub sections: RefCell<Vec<LaidSection>>,
+        /// Inline label of each entry in `sections`.
+        pub section_labels: RefCell<Vec<String>>,
+        pub section_demand_handler: RefCell<Option<SectionDemandHandler>>,
+        /// Last reported `(model epoch, unloaded sections in band)`, to report changes only.
+        pub last_demand: RefCell<Option<(u64, Vec<usize>)>>,
     }
 
     #[glib::object_subclass]
@@ -204,9 +217,11 @@ mod imp {
             }
 
             let sctx = self.snapshot_ctx(model, cache);
+            self.paint_section_chrome(snapshot, &sctx, &viewport, canvas_w);
             let (stats, mut to_load) = self.paint_snapshot_rows(snapshot, &sctx, &rows, &viewport);
             drop(rows);
             self.finish_snapshot(cache, &viewport, &stats, &mut to_load);
+            self.report_section_demand(model, &viewport);
         }
     }
 
@@ -229,6 +244,14 @@ mod imp {
             }
         }
 
+        fn label_height(&self) -> f32 {
+            if self.narrow.get() {
+                SECTION_LABEL_HEIGHT_NARROW
+            } else {
+                SECTION_LABEL_HEIGHT
+            }
+        }
+
         fn layout_for_width(&self, width: f32) -> f32 {
             let cached = self.cached_width.get();
             if (width - cached).abs() < 0.5 && cached >= 0.0 {
@@ -239,12 +262,46 @@ mod imp {
                 self.layout_h.set(0.0);
                 return 0.0;
             };
-            let dims = collect_dims(model);
-            let (rows, h) = pack_rows(&dims, width, self.cfg());
+            let (rows, h) = match model.sections() {
+                Some(sections) => self.layout_sections(model, sections, width),
+                None => {
+                    self.sections.borrow_mut().clear();
+                    self.section_labels.borrow_mut().clear();
+                    pack_rows(&collect_ratios(model), width, self.cfg())
+                }
+            };
             *self.rows.borrow_mut() = rows;
             self.cached_width.set(width);
             self.layout_h.set(h);
             h
+        }
+
+        /// Sectioned (Main library) layout: loaded sections pack exactly from their
+        /// tiles' ratios, unloaded ones contribute an estimate.
+        fn layout_sections(
+            &self,
+            model: &LibraryAssetModel,
+            sections: Vec<crate::library::asset_model::GridSection>,
+            width: f32,
+        ) -> (Vec<LaidRow>, f32) {
+            let mut offset = 0_u32;
+            let inputs: Vec<SectionInput> = sections
+                .iter()
+                .map(|section| {
+                    let range = offset..offset + section.count;
+                    offset = range.end;
+                    SectionInput {
+                        key: section.key.clone(),
+                        offset: range.start,
+                        count: section.count,
+                        ratios: section.loaded.then(|| model.ratios(range)),
+                    }
+                })
+                .collect();
+            let (laid, rows, h) = pack_sections(&inputs, width, self.cfg(), self.label_height());
+            *self.sections.borrow_mut() = laid;
+            *self.section_labels.borrow_mut() = sections.into_iter().map(|s| s.label).collect();
+            (rows, h)
         }
 
         pub(super) fn invalidate_layout(&self) {
@@ -253,7 +310,155 @@ mod imp {
             self.cached_width.set(-1.0);
             self.layout_h.set(0.0);
             self.rows.borrow_mut().clear();
+            self.sections.borrow_mut().clear();
             self.obj().queue_resize();
+        }
+
+        /// Relayout after the model changed. Sectioned layouts reflow immediately and
+        /// anchor the scroll: height changes of sections entirely above the viewport
+        /// are added to the scroll offset, so visible content does not move.
+        pub(super) fn relayout(&self) {
+            let width = self.cached_width.get();
+            let sectioned = self
+                .model
+                .get()
+                .is_some_and(LibraryAssetModel::is_sectioned);
+            if !sectioned || width < 0.0 {
+                self.invalidate_layout();
+                return;
+            }
+            let old_sections = std::mem::take(&mut *self.sections.borrow_mut());
+            let old_h = self.layout_h.get();
+            let scroll_y = self.anchor_scroll_y();
+            self.cached_width.set(-1.0);
+            let new_h = self.layout_for_width(width);
+            let delta = anchor_delta(&old_sections, &self.sections.borrow(), scroll_y);
+            if delta.abs() > 0.01
+                && let Some(adj) = self.find_vadjustment()
+            {
+                // Grow/shrink `upper` alongside so the new value is not clamped to the
+                // stale range; the viewport sets the same upper on its next allocation.
+                let upper = (adj.upper() + f64::from(new_h - old_h)).max(adj.page_size());
+                let value = (adj.value() + f64::from(delta))
+                    .clamp(adj.lower(), (upper - adj.page_size()).max(adj.lower()));
+                log::debug!(
+                    "masonry anchor delta={:.1} value {:.0} -> {:.0}",
+                    delta,
+                    adj.value(),
+                    value
+                );
+                adj.configure(
+                    value,
+                    adj.lower(),
+                    upper,
+                    adj.step_increment(),
+                    adj.page_increment(),
+                    adj.page_size(),
+                );
+            }
+            self.obj().queue_resize();
+            self.obj().queue_draw();
+        }
+
+        /// Canvas-relative scroll offset for anchoring, read from the adjustment
+        /// itself. `viewport()` derives it from the last allocation instead, which
+        /// is stale between an anchor correction and the next layout; reading the
+        /// adjustment keeps several bucket loads landing in one frame correct.
+        fn anchor_scroll_y(&self) -> f32 {
+            let Some(adj) = self.find_vadjustment() else {
+                return 0.0;
+            };
+            // Offset of the canvas inside the scrolled content (header rows above
+            // it), which does not change with scrolling.
+            let offset = self
+                .obj()
+                .parent()
+                .and_then(|parent| super::scrolled_child(&parent))
+                .and_then(|child| match child.downcast::<gtk::Viewport>() {
+                    Ok(viewport) => viewport.child(),
+                    Err(child) => Some(child),
+                })
+                .and_then(|content| {
+                    self.obj()
+                        .compute_point(&content, &gtk::graphene::Point::zero())
+                })
+                .map_or(0.0, |origin| origin.y());
+            adj.value() as f32 - offset
+        }
+
+        /// Inline month labels, plus a placeholder block for every unloaded section.
+        fn paint_section_chrome(
+            &self,
+            snapshot: &gtk::Snapshot,
+            sctx: &SnapshotCtx<'_>,
+            viewport: &SnapshotViewport,
+            canvas_w: f32,
+        ) {
+            let sections = self.sections.borrow();
+            if sections.is_empty() {
+                return;
+            }
+            let labels = self.section_labels.borrow();
+            let gap = self.border_gap.get();
+            let widget = self.obj();
+            let color = widget.color();
+            for i in sections_overlapping(&sections, viewport.top, viewport.bottom) {
+                let section = &sections[i];
+                if !section.loaded {
+                    let top = section.content_top() + gap;
+                    let h = (section.bottom() - top - gap).max(0.0);
+                    let w = (canvas_w - 2.0 * gap).max(0.0);
+                    snapshot.append_color(&sctx.placeholder, &Rect::new(gap, top, w, h));
+                }
+                let Some(label) = labels.get(i) else {
+                    continue;
+                };
+                let layout = widget.create_pango_layout(Some(label));
+                let attrs = gtk::pango::AttrList::new();
+                attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
+                attrs.insert(gtk::pango::AttrFloat::new_scale(1.15));
+                layout.set_attributes(Some(&attrs));
+                let (_, text_h) = layout.pixel_size();
+                snapshot.save();
+                snapshot.translate(&gtk::graphene::Point::new(
+                    12.0 + gap,
+                    section.top + (section.label_h - text_h as f32) * 0.5,
+                ));
+                snapshot.append_layout(&layout, &color);
+                snapshot.restore();
+            }
+        }
+
+        /// Tell the demand handler which unloaded sections intersect the viewport band
+        /// (the same `VIEWPORTS_BEHIND`/`VIEWPORTS_AHEAD` margins as thumbnails), once
+        /// per change. Deferred to idle so the handler never runs inside a snapshot.
+        fn report_section_demand(&self, model: &LibraryAssetModel, viewport: &SnapshotViewport) {
+            let Some(handler) = self.section_demand_handler.borrow().clone() else {
+                return;
+            };
+            let wanted: Vec<usize> = {
+                let sections = self.sections.borrow();
+                if sections.is_empty() {
+                    return;
+                }
+                sections_overlapping(&sections, viewport.band_top, viewport.band_bottom)
+                    .filter(|&i| !sections[i].loaded)
+                    .collect()
+            };
+            let report = (model.sections_epoch(), wanted);
+            if self.last_demand.borrow().as_ref() == Some(&report) {
+                return;
+            }
+            *self.last_demand.borrow_mut() = Some(report.clone());
+            glib::idle_add_local_once(move || handler(report.1));
+        }
+
+        /// Label of the section under the viewport's vertical midpoint.
+        pub(super) fn label_at_viewport_center(&self) -> Option<String> {
+            let (scroll_y, viewport_h) = self.viewport();
+            let sections = self.sections.borrow();
+            let index = super::section_at_y(&sections, scroll_y + viewport_h * 0.5)?;
+            self.section_labels.borrow().get(index).cloned()
         }
 
         fn snapshot_ctx<'a>(
@@ -635,7 +840,7 @@ mod imp {
             );
         }
 
-        fn viewport(&self) -> (f32, f32) {
+        pub(super) fn viewport(&self) -> (f32, f32) {
             let Some(adj) = self.find_vadjustment() else {
                 return (0.0, self.obj().height() as f32);
             };
@@ -652,7 +857,7 @@ mod imp {
             (scroll_y, adj.page_size() as f32)
         }
 
-        fn find_vadjustment(&self) -> Option<gtk::Adjustment> {
+        pub(super) fn find_vadjustment(&self) -> Option<gtk::Adjustment> {
             if let Some(adj) = self.vadjustment.borrow().clone() {
                 return Some(adj);
             }
@@ -697,7 +902,7 @@ mod imp {
     }
 }
 
-use super::load::{collect_dims, load_with_fallback, propagate_dimensions};
+use super::load::{collect_ratios, load_with_fallback, propagate_dimensions};
 
 glib::wrapper! {
     pub struct MasonryCanvas(ObjectSubclass<imp::MasonryCanvas>)
@@ -859,7 +1064,7 @@ fn finish_masonry_load(
     };
     imp.pending.borrow_mut().remove(asset_id);
     if dims_changed {
-        imp.invalidate_layout();
+        imp.relayout();
     }
     widget.queue_draw();
 }
