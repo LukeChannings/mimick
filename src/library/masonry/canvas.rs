@@ -52,7 +52,7 @@ mod imp {
         anchor_delta, bucket_for_asset, bucket_for_row_height, cached_texture, collect_ratios,
         finish_masonry_load, first_row_at_or_after, load_masonry_asset, load_target_for, pack_rows,
         pack_sections, placeholder_color, resolve_symbolic_icon, resolve_video_icon,
-        sections_overlapping,
+        sections_overlapping, stack_badge_geometry, stack_badge_icon_size,
     };
 
     pub(super) enum PaintResult {
@@ -117,6 +117,8 @@ mod imp {
         pub video_icon: OnceCell<gdk4::Paintable>,
         /// Cached favorite heart icon, painted on favorited tiles.
         pub heart_icon: OnceCell<gdk4::Paintable>,
+        /// Cached stack icon, painted with the member count on stack tiles.
+        pub stack_icon: OnceCell<gdk4::Paintable>,
         /// Cached checkbox icon (selected state).
         pub check_icon: OnceCell<gdk4::Paintable>,
         /// Cached checkbox icon (unselected state).
@@ -581,7 +583,7 @@ mod imp {
         }
 
         /// Overlays on top of the thumbnail: select-mode checkbox, video play badge,
-        /// and the favorite heart.
+        /// stack badge, and the favorite heart.
         fn paint_badges(
             &self,
             snapshot: &gtk::Snapshot,
@@ -599,8 +601,72 @@ mod imp {
             if is_video {
                 self.paint_video_badge(snapshot, it.x, row.y, it.w, row.h);
             }
+            if asset.is_stack() {
+                let cell = Rect::new(it.x, row.y, it.w, row.h);
+                self.paint_stack_badge(snapshot, asset.stack_count(), &cell);
+            }
             if asset.is_favorite() {
                 self.paint_favorite_badge(snapshot, it.x + it.w, row.y + row.h, row.h);
+            }
+        }
+
+        /// Paint the stack icon and member count as a pill in the top-right corner of
+        /// a stack tile, on the same dark backing as the video badge.
+        fn paint_stack_badge(&self, snapshot: &gtk::Snapshot, count: u32, cell: &Rect) {
+            let icon = self
+                .stack_icon
+                .get_or_init(|| resolve_symbolic_icon(&self.obj(), "mimick-stack-symbolic"));
+            let Some(symbolic) = icon.dynamic_cast_ref::<gtk::SymbolicPaintable>() else {
+                return;
+            };
+            let icon_size = stack_badge_icon_size(cell.height());
+            let layout = self.obj().create_pango_layout(Some(&count.to_string()));
+            let attrs = gtk::pango::AttrList::new();
+            attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
+            attrs.insert(gtk::pango::AttrSize::new_size_absolute(
+                (icon_size * 0.8 * gtk::pango::SCALE as f32) as i32,
+            ));
+            layout.set_attributes(Some(&attrs));
+            let (text_w, text_h) = layout.pixel_size();
+            let Some(badge) = stack_badge_geometry(cell.width(), cell.height(), text_w as f32)
+            else {
+                return;
+            };
+
+            let (x0, y0) = (cell.x(), cell.y());
+            let pill = Rect::new(
+                x0 + badge.pill.0,
+                y0 + badge.pill.1,
+                badge.pill.2,
+                badge.pill.3,
+            );
+            let radius = Size::new(badge.pill.3 * 0.5, badge.pill.3 * 0.5);
+            snapshot.push_rounded_clip(&RoundedRect::new(pill, radius, radius, radius, radius));
+            snapshot.append_color(&gdk4::RGBA::new(0.0, 0.0, 0.0, 0.55), &pill);
+            snapshot.pop();
+
+            let white = gdk4::RGBA::new(1.0, 1.0, 1.0, 0.95);
+            snapshot.save();
+            snapshot.translate(&gtk::graphene::Point::new(
+                x0 + badge.icon.0,
+                y0 + badge.icon.1,
+            ));
+            symbolic.snapshot_symbolic(
+                snapshot.upcast_ref::<gdk4::Snapshot>(),
+                badge.icon_size as f64,
+                badge.icon_size as f64,
+                &[white],
+            );
+            snapshot.restore();
+
+            if let Some((text_x, text_center_y)) = badge.text {
+                snapshot.save();
+                snapshot.translate(&gtk::graphene::Point::new(
+                    x0 + text_x,
+                    y0 + text_center_y - text_h as f32 * 0.5,
+                ));
+                snapshot.append_layout(&layout, &white);
+                snapshot.restore();
             }
         }
 
@@ -947,6 +1013,51 @@ fn placeholder_color() -> gdk4::RGBA {
 
 /// Resolve the video badge icon from the icon theme. The result is cached
 /// per-canvas via a `OnceCell` so the theme lookup only happens once.
+/// Stack badge icon edge for a row of height `cell_h`.
+fn stack_badge_icon_size(cell_h: f32) -> f32 {
+    (cell_h * 0.11).clamp(12.0, 18.0)
+}
+
+/// Where the stack badge goes inside a tile, relative to the tile's top-left corner.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct StackBadge {
+    /// Backing pill `(x, y, w, h)`.
+    pill: (f32, f32, f32, f32),
+    /// Icon top-left `(x, y)`.
+    icon: (f32, f32),
+    icon_size: f32,
+    /// Count text `(x, vertical centre)`; `None` when only the icon fits.
+    text: Option<(f32, f32)>,
+}
+
+/// Lay out the stack badge (icon + member count, top-right corner) for a
+/// `cell_w` × `cell_h` tile whose count text is `text_w` wide. Narrow tiles drop
+/// the count, then the whole badge, rather than paint over their neighbours.
+fn stack_badge_geometry(cell_w: f32, cell_h: f32, text_w: f32) -> Option<StackBadge> {
+    let icon_size = stack_badge_icon_size(cell_h);
+    let pad = (icon_size * 0.35).round();
+    let gap = (icon_size * 0.25).round();
+    let margin = (icon_size * 0.4).max(6.0);
+    let pill_h = icon_size + pad * 2.0;
+    let with_text = pad + icon_size + gap + text_w + pad * 1.2;
+    let icon_only = pad * 2.0 + icon_size;
+    let fits = |w: f32| w + margin * 2.0 <= cell_w && pill_h + margin * 2.0 <= cell_h;
+    let (pill_w, show_text) = if fits(with_text) {
+        (with_text, true)
+    } else if fits(icon_only) {
+        (icon_only, false)
+    } else {
+        return None;
+    };
+    let pill_x = cell_w - margin - pill_w;
+    Some(StackBadge {
+        pill: (pill_x, margin, pill_w, pill_h),
+        icon: (pill_x + pad, margin + pad),
+        icon_size,
+        text: show_text.then_some((pill_x + pad + icon_size + gap, margin + pill_h * 0.5)),
+    })
+}
+
 fn resolve_video_icon(widget: &MasonryCanvas) -> gdk4::Paintable {
     resolve_symbolic_icon(widget, "mimick-video-symbolic")
 }
@@ -1067,4 +1178,46 @@ fn finish_masonry_load(
         imp.relayout();
     }
     widget.queue_draw();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{StackBadge, stack_badge_geometry};
+
+    fn inside(badge: &StackBadge, cell_w: f32, cell_h: f32) -> bool {
+        let (x, y, w, h) = badge.pill;
+        x >= 0.0 && y >= 0.0 && x + w <= cell_w && y + h <= cell_h
+    }
+
+    #[test]
+    fn stack_badge_sits_in_the_top_right_corner_with_its_count() {
+        let badge = stack_badge_geometry(300.0, 200.0, 10.0).expect("fits");
+        assert!(inside(&badge, 300.0, 200.0));
+        let (x, y, w, _) = badge.pill;
+        // Same margin from the top and the right edge.
+        assert!((300.0 - (x + w) - y).abs() < 1e-3);
+        assert!(x > 150.0, "badge hugs the right edge, got x={x}");
+        let (text_x, _) = badge.text.expect("count shown");
+        assert!(text_x > badge.icon.0 + badge.icon_size);
+        assert!(text_x + 10.0 <= x + w);
+    }
+
+    #[test]
+    fn narrow_tiles_drop_the_count_then_the_badge() {
+        let full = stack_badge_geometry(300.0, 200.0, 30.0).unwrap();
+        let narrow_w = full.pill.2 + 2.0 * full.pill.1 - 1.0;
+        let icon_only = stack_badge_geometry(narrow_w, 200.0, 30.0).expect("icon fits");
+        assert!(icon_only.text.is_none());
+        assert!(inside(&icon_only, narrow_w, 200.0));
+        assert!(stack_badge_geometry(10.0, 200.0, 30.0).is_none());
+        assert!(stack_badge_geometry(300.0, 10.0, 30.0).is_none());
+    }
+
+    #[test]
+    fn stack_badge_scales_with_row_height_within_bounds() {
+        let small = stack_badge_geometry(1000.0, 60.0, 8.0).unwrap();
+        let large = stack_badge_geometry(1000.0, 600.0, 8.0).unwrap();
+        assert_eq!(small.icon_size, 12.0);
+        assert_eq!(large.icon_size, 18.0);
+    }
 }

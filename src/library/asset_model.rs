@@ -24,7 +24,7 @@ use gtk::subclass::prelude::{ObjectImpl, ObjectSubclass, ObjectSubclassIsExt};
 
 use crate::api_client::{LibraryAsset, TileAsset, normalize_checksum_to_hex};
 use crate::app_context::AppContext;
-use crate::library::asset_object::{AssetInit, AssetObject};
+use crate::library::asset_object::{AssetInit, AssetObject, asset_dimensions};
 
 /// One month section of the sectioned (Main library) model.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -325,8 +325,9 @@ impl LibraryAssetModel {
     }
 }
 
-/// Grid objects for one loaded bucket. `hydrated` (Unified mode) supplies the full
-/// records: filenames, MIME types and the checksums that drive the sync overlay.
+/// Grid objects for one loaded bucket. Tiles are thin (no filename, MIME type or
+/// checksum; `hydrated` false) unless `hydrated` already holds their full record
+/// (Unified mode's eager hydration, or an earlier interaction).
 pub fn build_tile_objects(
     tiles: &[TileAsset],
     hydrated: &HashMap<String, LibraryAsset>,
@@ -335,32 +336,57 @@ pub fn build_tile_objects(
     tiles
         .iter()
         .map(|tile| {
-            let full = hydrated.get(&tile.id);
-            let local_match = full
-                .and_then(|asset| asset.checksum.as_deref())
-                .and_then(normalize_checksum_to_hex)
-                .and_then(|hex| ctx.sync_index.local_path_for_checksum(&hex));
-            let (width, height) = full.map(asset_dimensions).unwrap_or((0, 0));
-            let object = AssetObject::new(AssetInit {
-                id: &tile.id,
-                filename: full.map_or("", |a| a.filename.as_str()),
-                mime_type: full.map_or("", |a| a.mime_type.as_str()),
-                created_at: &tile.file_created_at,
-                asset_type: if tile.is_image { "IMAGE" } else { "VIDEO" },
-                sync_state: if local_match.is_some() { 2 } else { 0 },
-                thumbhash: tile.thumbhash.as_deref(),
-                width,
-                height,
-                is_favorite: tile.is_favorite,
-                is_archived: tile.visibility == "archive",
-            });
-            object.set_ratio(tile.ratio);
-            if let Some(path) = local_match {
-                object.set_local_path(path);
+            let object = thin_tile_object(tile);
+            if let Some(full) = hydrated.get(&tile.id) {
+                apply_full_record(&object, full, ctx);
             }
             object
         })
         .collect()
+}
+
+/// A tile built from bucket data alone: enough to lay out and paint (ratio,
+/// thumbhash, favorite, video, stack badge), nothing that names a file.
+fn thin_tile_object(tile: &TileAsset) -> AssetObject {
+    let object = AssetObject::new(AssetInit {
+        id: &tile.id,
+        filename: "",
+        mime_type: "",
+        created_at: &tile.file_created_at,
+        asset_type: if tile.is_image { "IMAGE" } else { "VIDEO" },
+        sync_state: 0,
+        thumbhash: tile.thumbhash.as_deref(),
+        width: 0,
+        height: 0,
+        is_favorite: tile.is_favorite,
+        is_archived: tile.visibility == "archive",
+    });
+    object.set_hydrated(false);
+    object.set_ratio(tile.ratio);
+    if let Some((stack_id, count)) = &tile.stack {
+        object.set_stack_id(stack_id.as_str());
+        object.set_stack_count(*count);
+    }
+    object
+}
+
+/// Hydrate a grid object from its full record: filename, MIME type, pixel size,
+/// and the local copy its checksum maps to (the sync overlay, and the file the
+/// lightbox and Open In use when there is one).
+pub(crate) fn apply_full_record(object: &AssetObject, asset: &LibraryAsset, ctx: &AppContext) {
+    object.apply_full_record(asset);
+    if !object.local_path().is_empty() {
+        return;
+    }
+    let local_match = asset
+        .checksum
+        .as_deref()
+        .and_then(normalize_checksum_to_hex)
+        .and_then(|hex| ctx.sync_index.local_path_for_checksum(&hex));
+    if let Some(path) = local_match {
+        object.set_local_path(path);
+        object.set_sync_state(2);
+    }
 }
 
 pub(crate) fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> Vec<AssetObject> {
@@ -415,19 +441,6 @@ pub(crate) fn build_asset_objects(assets: &[LibraryAsset], ctx: &AppContext) -> 
         .collect()
 }
 
-/// Pixel size from the asset, falling back to EXIF (where Immich often keeps it); 0 = unknown.
-fn asset_dimensions(asset: &LibraryAsset) -> (u32, u32) {
-    let (exif_w, exif_h) = asset
-        .exif_info
-        .as_ref()
-        .map(|e| (e.exif_image_width, e.exif_image_height))
-        .unwrap_or((None, None));
-    (
-        asset.width.filter(|v| *v > 0).or(exif_w).unwrap_or(0),
-        asset.height.filter(|v| *v > 0).or(exif_h).unwrap_or(0),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
@@ -453,6 +466,77 @@ mod tests {
         });
         object.set_ratio(ratio);
         object
+    }
+
+    fn tile(id: &str, stack: Option<(&str, u32)>, is_image: bool) -> TileAsset {
+        TileAsset {
+            id: id.to_string(),
+            ratio: 1.5,
+            thumbhash: Some("hash".to_string()),
+            is_image,
+            duration: (!is_image).then(|| "0:00:05.000000".to_string()),
+            is_favorite: true,
+            visibility: "timeline".to_string(),
+            file_created_at: "2025-06-03T10:00:00.000Z".to_string(),
+            stack: stack.map(|(id, n)| (id.to_string(), n)),
+        }
+    }
+
+    #[test]
+    fn thin_tiles_carry_what_the_grid_paints_and_nothing_that_names_a_file() {
+        let object = thin_tile_object(&tile("a", Some(("s1", 4)), true));
+        assert!(!object.hydrated());
+        assert_eq!(object.filename(), "");
+        assert_eq!(object.mime_type(), "");
+        assert_eq!(object.ratio(), 1.5);
+        assert_eq!(object.thumbhash().as_deref(), Some("hash"));
+        assert!(object.is_favorite());
+        assert_eq!(object.stack_count(), 4);
+        assert_eq!(object.stack_id(), "s1");
+        assert!(object.is_stack());
+        assert_eq!(object.remote_id(), "a");
+
+        let video = thin_tile_object(&tile("v", None, false));
+        assert_eq!(video.asset_type(), "VIDEO");
+        assert_eq!(video.stack_count(), 0);
+        assert!(!video.is_stack());
+    }
+
+    #[test]
+    fn applying_the_full_record_hydrates_without_touching_tile_state() {
+        let object = thin_tile_object(&tile("a", Some(("s1", 2)), true));
+        let full = LibraryAsset {
+            id: "a".into(),
+            filename: "IMG_0001.HEIC".into(),
+            mime_type: "image/heic".into(),
+            created_at: "2025-06-03T10:00:00.000Z".into(),
+            asset_type: "IMAGE".into(),
+            thumbhash: None,
+            width: Some(4032),
+            height: Some(3024),
+            checksum: None,
+            exif_info: None,
+            is_favorite: false,
+            visibility: "timeline".into(),
+        };
+        object.apply_full_record(&full);
+        assert!(object.hydrated());
+        assert_eq!(object.filename(), "IMG_0001.HEIC");
+        assert_eq!(object.mime_type(), "image/heic");
+        assert_eq!((object.width(), object.height()), (4032, 3024));
+        // The grid's own state wins over the (possibly older) record.
+        assert!(object.is_favorite());
+        assert_eq!(object.ratio(), 1.5);
+        assert_eq!(object.stack_count(), 2);
+    }
+
+    #[test]
+    fn full_sources_and_placeholders_have_fixed_hydration() {
+        assert!(object("x", 1.0).hydrated());
+        assert!(
+            AssetObject::new_local("local:/a", "a.jpg", "image/jpeg", "", "IMAGE", "/a").hydrated()
+        );
+        assert!(!AssetObject::placeholder().hydrated());
     }
 
     fn section(key: &str, count: u32) -> GridSection {

@@ -8,6 +8,8 @@ use glib::prelude::ObjectExt;
 use glib::subclass::prelude::{DerivedObjectProperties, ObjectImpl, ObjectSubclass};
 use std::cell::{Cell, RefCell};
 
+use crate::api_client::LibraryAsset;
+
 mod imp {
     use super::{Cell, DerivedObjectProperties, ObjectExt, ObjectImpl, ObjectSubclass, RefCell};
     use glib::Properties;
@@ -73,6 +75,21 @@ mod imp {
         /// (layout then derives it from `width` / `height`).
         #[property(get, set)]
         ratio: Cell<f64>,
+
+        /// Members in the stack this tile stands in for; 0 = not stacked.
+        #[property(get, set)]
+        stack_count: Cell<u32>,
+
+        /// Immich stack id when `stack_count > 0`; empty string otherwise.
+        #[property(get, set)]
+        stack_id: RefCell<String>,
+
+        /// Whether the object carries the full asset record (filename, MIME type,
+        /// pixel size). Thin Main library tiles start false and are hydrated on
+        /// interaction (see "Hydration" in `CONTEXT.md`); every other source
+        /// builds hydrated objects.
+        #[property(get, set)]
+        hydrated: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -125,6 +142,27 @@ impl AssetObject {
         }
     }
 
+    /// Whether this tile stands in for a whole stack (two or more members).
+    pub fn is_stack(&self) -> bool {
+        self.stack_count() >= 2
+    }
+
+    /// Upgrade a thin tile with its full asset record: filename, MIME type and
+    /// native pixel size (when the record knows it). Tile-level state (favorite,
+    /// archive, ratio, stack) stays as the grid shows it; layout keeps using the
+    /// server ratio, so this never moves tiles.
+    pub fn apply_full_record(&self, asset: &LibraryAsset) {
+        self.set_filename(asset.filename.as_str());
+        self.set_mime_type(asset.mime_type.as_str());
+        let (width, height) = asset_dimensions(asset);
+        if width > 0 && height > 0 {
+            self.set_width(width);
+            self.set_height(height);
+        }
+        self.set_hydrated(true);
+    }
+
+    /// A fully-populated remote object (every source except thin Main library tiles).
     pub fn new(init: AssetInit<'_>) -> Self {
         glib::Object::builder()
             .property("id", init.id)
@@ -140,6 +178,7 @@ impl AssetObject {
             .property("height", init.height)
             .property("is-favorite", init.is_favorite)
             .property("is-archived", init.is_archived)
+            .property("hydrated", true)
             .build()
     }
 
@@ -166,6 +205,20 @@ impl AssetObject {
             .property("remote-id", "")
             .property("width", 0u32)
             .property("height", 0u32)
+            .property("hydrated", true)
             .build()
     }
+}
+
+/// Pixel size from the asset, falling back to EXIF (where Immich often keeps it); 0 = unknown.
+pub(crate) fn asset_dimensions(asset: &LibraryAsset) -> (u32, u32) {
+    let (exif_w, exif_h) = asset
+        .exif_info
+        .as_ref()
+        .map(|e| (e.exif_image_width, e.exif_image_height))
+        .unwrap_or((None, None));
+    (
+        asset.width.filter(|v| *v > 0).or(exif_w).unwrap_or(0),
+        asset.height.filter(|v| *v > 0).or(exif_h).unwrap_or(0),
+    )
 }
