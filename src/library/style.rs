@@ -323,6 +323,25 @@ picture.mimick-lightbox-picture {
     background-color: alpha(@view_fg_color, 0.05);
 }
 
+/* Lightbox stack strip: one thumbnail per stack member, current one outlined. */
+scrolledwindow.mimick-stack-strip {
+    min-height: 68px;
+}
+
+button.mimick-stack-member {
+    padding: 2px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+}
+
+button.mimick-stack-member.mimick-stack-member-current {
+    border-color: @accent_bg_color;
+}
+
+button.mimick-stack-member picture {
+    border-radius: 5px;
+}
+
 box.mimick-preview-unavailable {
     min-width: 240px;
     padding: 20px;

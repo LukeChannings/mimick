@@ -15,11 +15,11 @@ use crate::api_client::{ExifInfo, Tag, ThumbnailSize};
 use crate::library::asset_object::AssetObject;
 use crate::library::local_exif::{self, LocalExif};
 
-use super::actions::{TrashTarget, confirm_trash};
-use super::archive::{archive_icon, archive_tooltip, set_archived};
+use super::actions::{TrashTarget, confirm_trash_with};
+use super::archive::{archive_icon, archive_tooltip, set_archived_with};
 use super::asset_edit::show_edit_dialog;
 use super::asset_tags::TagSection;
-use super::context_menu::{AssetMenuHooks, show_asset_context_menu};
+use super::context_menu::{AssetMenuHooks, show_item_context_menu};
 use super::download::{
     begin_download_session, finish_download_item, open_local_with_default_app, spawn_video_handoff,
     start_download, track_download_item,
@@ -27,6 +27,9 @@ use super::download::{
 use super::favorites::{FavoriteHooks, heart_icon, heart_tooltip, toggle_favorite};
 use super::trash_view;
 use super::{LOCAL_ID_PREFIX, LibraryWindowUi, load_source_page, load_texture_oriented};
+
+mod stack;
+use stack::{StackState, StackStrip, StackTracking, build_stack_strip};
 
 /// Everything we can learn about a local file off the main thread before
 /// handing the data back to GTK. `exif` is the cached EXIF parse; `dims`
@@ -471,6 +474,12 @@ struct Lightbox {
     video_badge_button: gtk::Button,
     actions: ActionBar,
     details: DetailsPane,
+    // Thumbnails of the open stack's members (hidden unless the tile is a stack).
+    strip: StackStrip,
+    // The open stack tile's members and which one is displayed (see `stack.rs`).
+    // `None` for ordinary tiles, and until a stack's members have loaded.
+    stack: RefCell<Option<StackState>>,
+    tracking: StackTracking,
     pos: Cell<u32>,
     // Increments on every navigation. Async load tasks capture the generation
     // they were started for and skip UI writes if the user has navigated away
@@ -513,7 +522,7 @@ pub(super) fn open_lightbox(ui: Rc<LibraryWindowUi>, position: u32) {
     lightbox.connect_pointer_gestures();
     lightbox.connect_keys();
     lightbox.connect_actions();
-    lightbox.render();
+    lightbox.show_tile();
     lightbox.ui.nav.push(&lightbox.header.page);
 }
 
@@ -862,7 +871,7 @@ fn details_scroller(inner: &gtk::Box) -> gtk::ScrolledWindow {
         .build()
 }
 
-fn build_viewer(picture: &PictureArea, actions: &ActionBar) -> gtk::Box {
+fn build_viewer(picture: &PictureArea, strip: &StackStrip, actions: &ActionBar) -> gtk::Box {
     let viewer = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(8)
@@ -873,6 +882,7 @@ fn build_viewer(picture: &PictureArea, actions: &ActionBar) -> gtk::Box {
         .hexpand(true)
         .build();
     viewer.append(&picture.overlay);
+    viewer.append(&strip.scroller);
     viewer.append(&actions.bar);
     viewer
 }
@@ -927,7 +937,8 @@ impl Lightbox {
             .sync_create()
             .build();
         let details = build_details_pane();
-        let viewer = build_viewer(&picture, &actions);
+        let strip = build_stack_strip();
+        let viewer = build_viewer(&picture, &strip, &actions);
         let body = build_split_view(&ui, &viewer, &details, &header.details_btn);
         header.toolbar.set_content(Some(&body));
 
@@ -939,6 +950,9 @@ impl Lightbox {
             video_badge_button,
             actions,
             details,
+            strip,
+            stack: RefCell::new(None),
+            tracking: StackTracking::default(),
             pos: Cell::new(position),
             load_gen: Cell::new(0),
             render_gen: Cell::new(0),
@@ -1023,6 +1037,7 @@ impl Lightbox {
 
         let lb = self.clone();
         self.header.page.connect_hidden(move |_| {
+            lb.close_stack();
             if lb.reload_on_close.replace(false) {
                 super::refresh_library_after_mutation(lb.ui.clone(), true);
             }
@@ -1123,10 +1138,13 @@ impl Lightbox {
         right_click.set_button(gtk::gdk::BUTTON_SECONDARY);
         let lb = self.clone();
         right_click.connect_pressed(move |_, _, x, y| {
-            show_asset_context_menu(
+            let Some(item) = lb.current_item() else {
+                return;
+            };
+            show_item_context_menu(
                 lb.ui.clone(),
                 &lb.picture.scrolled,
-                lb.pos.get(),
+                item,
                 x,
                 y,
                 lb.menu_hooks(),
@@ -1154,13 +1172,7 @@ impl Lightbox {
     fn connect_actions(self: &Rc<Self>) {
         let lb = self.clone();
         self.actions.download.connect_clicked(move |_| {
-            let Some(item) = lb
-                .ui
-                .grid
-                .model
-                .item(lb.pos.get())
-                .and_downcast::<AssetObject>()
-            else {
+            let Some(item) = lb.current_item() else {
                 return;
             };
             let asset_id = item.property::<String>("id");
@@ -1210,7 +1222,12 @@ impl Lightbox {
         super::search_by_tag(self.ui.clone(), tag);
     }
 
+    /// The asset every action targets: the selected stack member when a stack is
+    /// open, otherwise the grid tile at the current position.
     fn current_item(&self) -> Option<AssetObject> {
+        if let Some(state) = self.stack.borrow().as_ref() {
+            return Some(state.selected_object());
+        }
         self.ui
             .grid
             .model
@@ -1220,11 +1237,31 @@ impl Lightbox {
 
     /// Hooks for the right-click menu so trash/edit there update this lightbox.
     fn menu_hooks(self: &Rc<Self>) -> AssetMenuHooks {
-        let lb_trashed = self.clone();
         let lb_edited = self.clone();
         AssetMenuHooks {
-            on_trashed: Rc::new(move || lb_trashed.after_trash()),
+            on_trashed: Rc::new(self.removal_hook()),
             on_edited: Rc::new(move |date_changed| lb_edited.after_edit(date_changed)),
+            detached: self.in_stack(),
+        }
+    }
+
+    /// What to do once the displayed asset has left the library (trashed, archived
+    /// out of the view, un-favorited in Favorites). Decided now, because the grid may
+    /// have dropped the tile by the time it runs.
+    fn removal_hook(self: &Rc<Self>) -> impl Fn() + 'static {
+        let lb = self.clone();
+        let in_stack = self.in_stack();
+        // A stack tile's Primary can leave while the stack lives on as another tile.
+        let was_stack_tile = self.current_item().is_some_and(|item| item.is_stack());
+        move || {
+            if in_stack {
+                lb.drop_displayed_member();
+            } else {
+                if was_stack_tile {
+                    lb.reload_on_close.set(true);
+                }
+                lb.after_trash();
+            }
         }
     }
 
@@ -1237,18 +1274,22 @@ impl Lightbox {
         else {
             return;
         };
-        let lb = self.clone();
+        let on_removed = self.removal_hook();
         if trash_view::is_trash_active(&self.ui) {
             let ids = vec![target.remote_id().to_string()];
-            trash_view::confirm_delete_permanently(self.ui.clone(), ids, move || lb.after_trash());
+            trash_view::confirm_delete_permanently(self.ui.clone(), ids, on_removed);
         } else {
-            confirm_trash(self.ui.clone(), vec![target], 0, move || lb.after_trash());
+            // A stack member is not a grid tile: leave the grid for the reload on close.
+            let from_grid = !self.in_stack();
+            confirm_trash_with(self.ui.clone(), vec![target], 0, from_grid, on_removed);
         }
     }
 
     /// The trashed item is already gone from the grid model, so the same index now
     /// holds the next photo; step back at the end and close once nothing is left.
     fn after_trash(self: &Rc<Self>) {
+        // The open stack (if any) belonged to the tile that just left.
+        self.reset_stack();
         let n = self.ui.grid.model.n_items();
         if n == 0 {
             self.ui.nav.pop();
@@ -1283,10 +1324,10 @@ impl Lightbox {
         let Some(item) = self.current_item() else {
             return;
         };
-        let (lb_change, lb_removed) = (self.clone(), self.clone());
+        let lb_change = self.clone();
         let hooks = FavoriteHooks {
             on_change: Rc::new(move |favorite| lb_change.show_heart(favorite)),
-            on_removed: Rc::new(move || lb_removed.after_trash()),
+            on_removed: Rc::new(self.removal_hook()),
         };
         toggle_favorite(&self.ui, &item, hooks);
     }
@@ -1304,9 +1345,11 @@ impl Lightbox {
         };
         let archived = !item.is_archived();
         let lb = self.clone();
-        set_archived(&self.ui, vec![item], archived, move |removed| {
+        let on_removed = self.removal_hook();
+        let from_grid = !self.in_stack();
+        set_archived_with(&self.ui, vec![item], archived, from_grid, move |removed| {
             if removed {
-                lb.after_trash();
+                on_removed();
             } else {
                 lb.show_archive(archived);
             }
@@ -1551,7 +1594,19 @@ impl Lightbox {
         vadj.set_value(target_scroll_y);
     }
 
-    /// Show the asset at `pos`. A thin Main library tile is hydrated first (its
+    /// Show the tile at `pos` after navigating to it: its stack (if any) starts
+    /// over at the Primary, the neighbouring tiles are preloaded, and a stack tile's
+    /// members are fetched in the background.
+    fn show_tile(self: &Rc<Self>) {
+        self.reset_stack();
+        self.render();
+        if let Some(tile) = self.current_item() {
+            self.begin_stack_fetch(&tile);
+        }
+        self.preload_neighbours();
+    }
+
+    /// Show the displayed asset (the tile, or the selected stack member). A thin Main library tile is hydrated first (its
     /// filename and MIME type drive the title, video handling and original
     /// download); the current picture stays up for that one round-trip.
     fn render(self: &Rc<Self>) {
@@ -1579,6 +1634,7 @@ impl Lightbox {
     /// Title, details, action buttons, and picture for `item` (at `pos`).
     fn render_item(self: &Rc<Self>, item: &AssetObject) {
         let pos = self.pos.get();
+        let generation = self.render_gen.get();
         let info = AssetInfo::from_item(item);
 
         self.header.page.set_title(&truncate_filename(
@@ -1609,9 +1665,9 @@ impl Lightbox {
         self.start_picture_load(&info);
         self.details.loading.set_visible(true);
         if info.is_local() && !info.is_video() {
-            self.load_local_details(pos, info.local_path);
+            self.load_local_details(generation, info.local_path);
         } else {
-            self.load_remote_details(pos, info.asset_id);
+            self.load_remote_details(generation, info.asset_id);
         }
     }
 
@@ -1876,7 +1932,7 @@ impl Lightbox {
     }
 
     /// Local image: parse EXIF on a blocking worker (cached on disk, so repeat opens are cheap).
-    fn load_local_details(self: &Rc<Self>, pos: u32, local_path: String) {
+    fn load_local_details(self: &Rc<Self>, generation: u64, local_path: String) {
         let lb = self.clone();
         glib::MainContext::default().spawn_local(async move {
             let cache_root = local_exif::cache_root();
@@ -1885,7 +1941,8 @@ impl Lightbox {
             })
             .await
             .ok();
-            if lb.pos.get() != pos {
+            // Superseded by a later render (navigation, member switch, toggle).
+            if lb.render_gen.get() != generation {
                 return;
             }
             lb.details.loading.set_visible(false);
@@ -1900,11 +1957,11 @@ impl Lightbox {
     }
 
     /// Fetch EXIF from the server; dropped if the user has moved to another asset.
-    fn load_remote_details(self: &Rc<Self>, pos: u32, asset_id: String) {
+    fn load_remote_details(self: &Rc<Self>, generation: u64, asset_id: String) {
         let lb = self.clone();
         glib::MainContext::default().spawn_local(async move {
             let result = lb.ui.ctx.api_client.fetch_asset_details(&asset_id).await;
-            if lb.pos.get() != pos {
+            if lb.render_gen.get() != generation {
                 return;
             }
             lb.details.loading.set_visible(false);
