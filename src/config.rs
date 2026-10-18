@@ -390,7 +390,7 @@ fn default_true() -> bool {
 }
 
 fn default_grid_quality() -> String {
-    "thumbnail".to_string()
+    "auto".to_string()
 }
 
 /// Helper to default parallel upload worker threads to 3.
@@ -439,6 +439,7 @@ impl Config {
             if let Ok(content) = fs::read_to_string(&self.config_file) {
                 if let Ok(data) = serde_json::from_str(&content) {
                     self.data = data;
+                    self.migrate();
                     log::info!("Config loaded from: {}", self.config_file.display());
                     return true;
                 }
@@ -452,6 +453,16 @@ impl Config {
             self.save();
         }
         false
+    }
+
+    /// One-off value migrations for configs written by older builds.
+    fn migrate(&mut self) {
+        // "thumbnail" was the implicit default before the grid became
+        // scale-aware — nobody chose it. "auto" picks the sharper preview
+        // bucket only where the thumbnail would visibly upscale.
+        if self.data.library_grid_quality == "thumbnail" {
+            self.data.library_grid_quality = "auto".to_string();
+        }
     }
 
     /// Atomically write current configuration values back to disk.

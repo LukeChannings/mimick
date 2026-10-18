@@ -139,7 +139,6 @@ struct LibraryWindowUi {
     source_mode: gtk::DropDown,
     source_revealer: gtk::Revealer,
     upload_button: gtk::Button,
-    timeline_banner: gtk::Label,
     source_mode_suppressed: Cell<bool>,
     sidebar_suppressed: Cell<bool>,
     back_button: gtk::Button,
@@ -763,10 +762,6 @@ fn search_by_tag(ui: Rc<LibraryWindowUi>, tag: Tag) {
 }
 
 fn apply_source_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
-    // The month-year banner follows the Main library's month sections.
-    ui.timeline_banner
-        .set_visible(main_library::is_main_library(source));
-
     let is_local = matches!(
         source,
         LibrarySource::LocalAll
@@ -813,11 +808,6 @@ fn apply_source_ui_state(ui: &LibraryWindowUi, source: &LibrarySource) {
     }
 
     refresh_album_link_row(ui, source);
-}
-
-/// Refresh the month-year banner from the section under the viewport midpoint.
-fn update_timeline_banner_if_active(ui: &Rc<LibraryWindowUi>) {
-    main_library::update_banner(ui);
 }
 
 /// Retrieve albums from the API and update the side navigation sidebar entries.
@@ -1215,7 +1205,6 @@ fn apply_page_result(ui: &Rc<LibraryWindowUi>, generation: u64, append: bool, re
     // triggered by the stack transition can safely re-acquire library_state.
     sync_content_state(ui);
     reload_sidebar(ui);
-    update_timeline_banner_if_active(ui);
 }
 
 fn setup_album_drop_target(

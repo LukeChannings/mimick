@@ -6,7 +6,10 @@
 
 use crate::api_client::ThumbnailSize;
 
-pub(crate) const PREVIEW_BUCKET_THRESHOLD: f32 = 600.0;
+/// Edge length (px) of Immich's `thumbnail` bucket. Rows rendered taller than
+/// this in *device* pixels would upscale it visibly, so Auto switches to the
+/// `preview` bucket beyond it.
+pub(crate) const THUMBNAIL_EDGE: f32 = 250.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GridQuality {
@@ -28,13 +31,15 @@ impl GridQuality {
     }
 }
 
-pub(crate) fn bucket_for_row_height(h: f32, quality: GridQuality) -> ThumbnailSize {
+/// `device_h` is the row height in device pixels (logical height × the
+/// widget's scale factor), so HiDPI screens get sharp tiles too.
+pub(crate) fn bucket_for_row_height(device_h: f32, quality: GridQuality) -> ThumbnailSize {
     match quality {
         GridQuality::Thumbnail => ThumbnailSize::Thumbnail,
         GridQuality::Preview => ThumbnailSize::Preview,
         GridQuality::Fullsize => ThumbnailSize::Fullsize,
         GridQuality::Auto => {
-            if h <= PREVIEW_BUCKET_THRESHOLD {
+            if device_h <= THUMBNAIL_EDGE {
                 ThumbnailSize::Thumbnail
             } else {
                 ThumbnailSize::Preview
@@ -62,11 +67,11 @@ mod tests {
             ThumbnailSize::Thumbnail
         ));
         assert!(matches!(
-            bucket_for_row_height(PREVIEW_BUCKET_THRESHOLD, GridQuality::Auto),
+            bucket_for_row_height(THUMBNAIL_EDGE, GridQuality::Auto),
             ThumbnailSize::Thumbnail
         ));
         assert!(matches!(
-            bucket_for_row_height(PREVIEW_BUCKET_THRESHOLD + 1.0, GridQuality::Auto),
+            bucket_for_row_height(THUMBNAIL_EDGE + 1.0, GridQuality::Auto),
             ThumbnailSize::Preview
         ));
     }

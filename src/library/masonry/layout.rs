@@ -393,7 +393,10 @@ pub(crate) fn anchor_delta(old: &[LaidSection], new: &[LaidSection], scroll_y: f
     moved.map_or(0.0, |s| s.top - anchor.top)
 }
 
-/// The non-empty section containing `y`.
+/// The non-empty section containing `y`. Production code no longer needs this
+/// lookup (the sticky labels pin inside the snapshot pass), but the tests keep
+/// it as the spec for `pack_sections` boundary behavior.
+#[cfg(test)]
 pub(crate) fn section_at_y(sections: &[LaidSection], y: f32) -> Option<usize> {
     let idx = sections.partition_point(|s| s.bottom() <= y);
     sections

@@ -96,11 +96,6 @@ impl MasonryCanvas {
         *self.imp().drag_hydrator.borrow_mut() = Some(Rc::new(f));
     }
 
-    /// Label of the month section under the viewport midpoint (sectioned models only).
-    pub fn section_label_at_viewport_center(&self) -> Option<String> {
-        self.imp().label_at_viewport_center()
-    }
-
     fn hit_test(&self, x: f64, y: f64) -> Option<u32> {
         let rows = self.imp().rows.borrow();
         let r = row_at_y(&rows, y as f32)?;

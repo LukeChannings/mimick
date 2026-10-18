@@ -1469,7 +1469,7 @@ impl Lightbox {
         }
         self.pos.set(target);
         self.nav_dir.set(dir);
-        self.render();
+        self.show_tile();
     }
 
     /// One-shot: render `target` once its slot holds a real tile, unless the user
@@ -1497,7 +1497,7 @@ impl Lightbox {
                 if lb.pos.get() == from && target < model.n_items() {
                     lb.pos.set(target);
                     lb.nav_dir.set(dir);
-                    lb.render();
+                    lb.show_tile();
                 }
             });
         *self.pending_step.borrow_mut() = Some(id);
@@ -1525,7 +1525,7 @@ impl Lightbox {
             if pos + 1 < m.n_items() {
                 lb.pos.set(pos + 1);
                 lb.nav_dir.set(1);
-                lb.render();
+                lb.show_tile();
             }
             lb.header.next_btn.set_sensitive(true);
             if let Some(hid) = handler_id_clone.borrow_mut().take() {

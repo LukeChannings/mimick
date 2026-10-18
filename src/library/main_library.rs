@@ -9,8 +9,6 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use gtk::prelude::*;
-
 use crate::api_client::{
     LibraryAsset, MetadataSearchFilters, SortOrder, TileAsset, TimeBucket,
     supports_timeline_buckets,
@@ -148,7 +146,6 @@ fn apply_listing(
     ui.grid.model.reset_sections(sections);
     super::sync_content_state(ui);
     super::reload_sidebar(ui);
-    update_banner(ui);
 }
 
 /// Unified's local-only section: watched files whose checksum does not map to a
@@ -313,7 +310,6 @@ fn apply_bucket(
     };
     // The store borrow is released: items_changed handlers may run arbitrary UI code.
     ui.grid.model.fill_section(section, objects);
-    update_banner(ui);
 }
 
 /// Drop deleted/archived assets from the Main library in place. False when the
@@ -324,17 +320,4 @@ pub(super) fn remove_ids(ui: &LibraryWindowUi, ids: &[String]) -> bool {
     }
     ui.buckets.borrow_mut().remove_ids(ids);
     ui.grid.model.remove_ids(ids)
-}
-
-/// The floating month banner shows the section under the viewport midpoint.
-pub(super) fn update_banner(ui: &LibraryWindowUi) {
-    if !ui.timeline_banner.is_visible() {
-        return;
-    }
-    let label = ui
-        .grid
-        .canvas
-        .section_label_at_viewport_center()
-        .unwrap_or_default();
-    ui.timeline_banner.set_label(&label);
 }

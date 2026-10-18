@@ -79,7 +79,6 @@ pub(super) struct ContentParts {
     bottom_nav: super::bottom_nav::BottomNav,
     search_view: SearchViewParts,
     controls: ControlsParts,
-    banner: gtk::Label,
     stack: gtk::Stack,
     error_label: gtk::Label,
     transfer: TransferParts,
@@ -176,7 +175,6 @@ impl ContentParts {
             bottom_nav: super::bottom_nav::build_bottom_nav(),
             search_view: build_search_view(),
             controls: build_controls(),
-            banner: build_timeline_banner(),
             stack,
             error_label,
             transfer: build_transfer_indicator(),
@@ -192,7 +190,6 @@ impl ContentParts {
             .build();
         column.append(&self.controls.root);
         column.append(&self.search_view.root);
-        column.append(&self.banner);
         column.append(&self.stack);
         column.append(&self.bottom_nav.root);
         column.append(&self.bulk.bar);
@@ -233,7 +230,6 @@ impl LibraryWindowUi {
             source_mode: controls.source_mode,
             source_revealer: controls.source_revealer,
             upload_button: controls.upload_button,
-            timeline_banner: content.banner,
             source_mode_suppressed: Cell::new(false),
             sidebar_suppressed: Cell::new(false),
             back_button: header.back_button,
@@ -350,19 +346,6 @@ fn build_controls() -> ControlsParts {
         sort_mode,
         upload_button,
     }
-}
-
-fn build_timeline_banner() -> gtk::Label {
-    gtk::Label::builder()
-        .xalign(0.0)
-        .css_classes(vec!["mimick-timeline-banner".to_string()])
-        .visible(false)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .max_width_chars(20)
-        .margin_top(4)
-        .margin_bottom(4)
-        .margin_start(12)
-        .build()
 }
 
 /// Stack of loading/empty/error states and the grid, Explore, and Albums views.

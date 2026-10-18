@@ -16,10 +16,7 @@ use crate::settings_window::{build_settings_window_with_parent, show_queue_inspe
 
 use super::download::{open_local_with_default_app, spawn_video_handoff};
 use super::navigation;
-use super::{
-    LibraryWindowUi, load_albums, load_source_page, load_status, open_lightbox,
-    update_timeline_banner_if_active,
-};
+use super::{LibraryWindowUi, load_albums, load_source_page, load_status, open_lightbox};
 
 pub(super) fn connect_controls(ui: Rc<LibraryWindowUi>) {
     connect_window_actions(&ui);
@@ -440,7 +437,6 @@ pub(super) fn connect_grid_handlers(ui: Rc<LibraryWindowUi>) {
             glib::idle_add_local_once(move || {
                 scroll_pending.set(false);
                 let adj = ui.grid.scrolled.vadjustment();
-                update_timeline_banner_if_active(&ui);
 
                 // The Main library loads buckets from the viewport, not by paging.
                 if ui.grid.model.is_sectioned() {

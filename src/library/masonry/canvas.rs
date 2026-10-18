@@ -28,7 +28,7 @@ const VIEWPORTS_AHEAD: f32 = 4.0;
 use super::layout::{
     LaidItem, LaidRow, LaidSection, LayoutConfig, SECTION_LABEL_HEIGHT,
     SECTION_LABEL_HEIGHT_NARROW, SectionInput, anchor_delta, first_row_at_or_after, item_at_x,
-    pack_rows, pack_sections, row_at_y, section_at_y, sections_overlapping,
+    pack_rows, pack_sections, row_at_y, sections_overlapping,
 };
 pub use super::quality::GridQuality;
 use super::quality::{bucket_for_row_height, fallback_bucket};
@@ -225,6 +225,7 @@ mod imp {
             self.paint_section_chrome(snapshot, &sctx, &viewport, canvas_w);
             let (stats, mut to_load) = self.paint_snapshot_rows(snapshot, &sctx, &rows, &viewport);
             drop(rows);
+            self.paint_section_labels(snapshot, &viewport, canvas_w);
             self.finish_snapshot(cache, &viewport, &stats, &mut to_load);
             self.report_section_demand(model, &viewport);
         }
@@ -391,7 +392,7 @@ mod imp {
             adj.value() as f32 - offset
         }
 
-        /// Inline month labels, plus a placeholder block for every unloaded section.
+        /// Placeholder blocks for every unloaded section (painted under the tiles).
         fn paint_section_chrome(
             &self,
             snapshot: &gtk::Snapshot,
@@ -403,10 +404,7 @@ mod imp {
             if sections.is_empty() {
                 return;
             }
-            let labels = self.section_labels.borrow();
             let gap = self.border_gap.get();
-            let widget = self.obj();
-            let color = widget.color();
             for i in sections_overlapping(&sections, viewport.top, viewport.bottom) {
                 let section = &sections[i];
                 if !section.loaded {
@@ -415,9 +413,49 @@ mod imp {
                     let w = (canvas_w - 2.0 * gap).max(0.0);
                     snapshot.append_color(&sctx.placeholder, &Rect::new(gap, top, w, h));
                 }
+            }
+        }
+
+        /// Month labels, painted over the tiles. Each label is sticky: it pins to
+        /// the viewport top while its section scrolls past, until the next
+        /// section's label pushes it out of the way.
+        fn paint_section_labels(
+            &self,
+            snapshot: &gtk::Snapshot,
+            viewport: &SnapshotViewport,
+            canvas_w: f32,
+        ) {
+            let sections = self.sections.borrow();
+            if sections.is_empty() {
+                return;
+            }
+            let labels = self.section_labels.borrow();
+            let gap = self.border_gap.get();
+            let widget = self.obj();
+            let color = widget.color();
+            // Backdrop for a pinned label floating over photos: dark in dark
+            // themes, light in light ones (derived from the foreground colour).
+            let dark_theme = color.red() + color.green() + color.blue() > 1.5;
+            let backdrop = if dark_theme {
+                gdk4::RGBA::new(0.07, 0.07, 0.07, 0.82)
+            } else {
+                gdk4::RGBA::new(0.98, 0.98, 0.98, 0.82)
+            };
+            for i in sections_overlapping(&sections, viewport.top, viewport.bottom) {
+                let section = &sections[i];
+                if section.label_h <= 0.0 {
+                    continue;
+                }
                 let Some(label) = labels.get(i) else {
                     continue;
                 };
+                let y = viewport
+                    .top
+                    .max(section.top)
+                    .min(section.bottom() - section.label_h);
+                if y > section.top {
+                    snapshot.append_color(&backdrop, &Rect::new(0.0, y, canvas_w, section.label_h));
+                }
                 let layout = widget.create_pango_layout(Some(label));
                 let attrs = gtk::pango::AttrList::new();
                 attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
@@ -427,7 +465,7 @@ mod imp {
                 snapshot.save();
                 snapshot.translate(&gtk::graphene::Point::new(
                     12.0 + gap,
-                    section.top + (section.label_h - text_h as f32) * 0.5,
+                    y + (section.label_h - text_h as f32) * 0.5,
                 ));
                 snapshot.append_layout(&layout, &color);
                 snapshot.restore();
@@ -456,14 +494,6 @@ mod imp {
             }
             *self.last_demand.borrow_mut() = Some(report.clone());
             glib::idle_add_local_once(move || handler(report.1));
-        }
-
-        /// Label of the section under the viewport's vertical midpoint.
-        pub(super) fn label_at_viewport_center(&self) -> Option<String> {
-            let (scroll_y, viewport_h) = self.viewport();
-            let sections = self.sections.borrow();
-            let index = super::section_at_y(&sections, scroll_y + viewport_h * 0.5)?;
-            self.section_labels.borrow().get(index).cloned()
         }
 
         fn snapshot_ctx<'a>(
@@ -522,7 +552,10 @@ mod imp {
             to_load: &mut Vec<LoadRequest>,
         ) {
             let row_in_viewport = row.y + row.h > viewport.top && row.y < viewport.bottom;
-            let bucket = bucket_for_row_height(row.h, self.quality.get());
+            // Auto quality compares against the thumbnail's pixel edge, so feed it
+            // device pixels: logical row height × the monitor's scale factor.
+            let scale = self.obj().scale_factor().max(1) as f32;
+            let bucket = bucket_for_row_height(row.h * scale, self.quality.get());
 
             for it in &row.items {
                 stats.record(self.paint_item(snapshot, sctx, row, it, row_in_viewport));
@@ -551,7 +584,9 @@ mod imp {
 
             let asset_id = asset.property::<String>("id");
             let local_path = asset.property::<String>("local-path");
-            let bucket = bucket_for_asset(&asset_id, &local_path, row.h, self.quality.get());
+            let scale = self.obj().scale_factor().max(1) as f32;
+            let bucket =
+                bucket_for_asset(&asset_id, &local_path, row.h * scale, self.quality.get());
             let cached = cached_texture(sctx.cache, &asset_id, bucket, row_in_viewport);
 
             let clipped = CORNER_RADIUS > 0.0;
@@ -1082,16 +1117,17 @@ fn resolve_symbolic_icon(widget: &MasonryCanvas, icon_name: &str) -> gdk4::Paint
     icon.upcast::<gdk4::Paintable>()
 }
 
+/// `device_row_h` is in device pixels (logical row height × scale factor).
 fn bucket_for_asset(
     asset_id: &str,
     local_path: &str,
-    row_h: f32,
+    device_row_h: f32,
     quality: GridQuality,
 ) -> ThumbnailSize {
     if !local_path.is_empty() && asset_id.starts_with(crate::library::LOCAL_ID_PREFIX) {
         ThumbnailSize::Thumbnail
     } else {
-        bucket_for_row_height(row_h, quality)
+        bucket_for_row_height(device_row_h, quality)
     }
 }
 
