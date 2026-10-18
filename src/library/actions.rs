@@ -7,11 +7,12 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use futures_util::StreamExt;
 use glib::clone;
 use gtk::prelude::*;
 use libadwaita::prelude::*;
 
-use crate::api_client::SharedLinkTarget;
+use crate::api_client::{SharedLinkTarget, StackResponse, is_forbidden};
 use crate::library::asset_object::AssetObject;
 
 use super::LOCAL_ID_PREFIX;
@@ -228,12 +229,19 @@ pub(super) fn selected_items(ui: &Rc<LibraryWindowUi>) -> Vec<AssetObject> {
     }
     out
 }
-
-/// A server asset the user asked to move to the Immich trash.
+/// A server asset the user asked to move to the Immich trash or archive.
+///
+/// A Stack tile stands for every member of its stack: archive and delete fan out
+/// to all of them (see [`expand_stack_targets`]), while every other action works
+/// on the tile's own id, which is the Primary.
 pub(super) struct TrashTarget {
     remote_id: String,
     filename: String,
     has_local_copy: bool,
+    /// Immich stack id; empty when the tile is not a Stack tile.
+    stack_id: String,
+    /// Members in the stack (from the bucket's `stack-count`); 0 when not stacked.
+    stack_count: u32,
 }
 
 impl TrashTarget {
@@ -241,7 +249,16 @@ impl TrashTarget {
         &self.remote_id
     }
 
-    /// `None` for local-only items, which have nothing on the server to trash.
+    /// Strip stack info so the action targets just this asset. Lightbox actions
+    /// target the displayed member, never the whole stack (grid actions do the
+    /// opposite — see `expand_stack_targets`).
+    pub(super) fn member_only(mut self) -> Self {
+        self.stack_id.clear();
+        self.stack_count = 0;
+        self
+    }
+
+    /// `None` for local-only items, which have nothing on the server to act on.
     pub(super) fn from_item(item: &AssetObject) -> Option<Self> {
         let id = item.property::<String>("id");
         let remote_id = item.property::<String>("remote-id");
@@ -249,12 +266,155 @@ impl TrashTarget {
         if remote_id.is_empty() || remote_id.starts_with(LOCAL_ID_PREFIX) {
             return None;
         }
+        let stack_id = item.stack_id();
+        let (stack_id, stack_count) = if item.is_stack() && !stack_id.is_empty() {
+            (stack_id, item.stack_count())
+        } else {
+            (String::new(), 0)
+        };
         Some(Self {
             remote_id,
             filename: item.property("filename"),
             has_local_copy: !item.property::<String>("local-path").is_empty(),
+            stack_id,
+            stack_count,
         })
     }
+
+    fn is_stack(&self) -> bool {
+        !self.stack_id.is_empty()
+    }
+
+    /// Files this target covers on the server: the whole stack, or the one asset.
+    fn file_count(&self) -> u32 {
+        if self.is_stack() {
+            self.stack_count.max(1)
+        } else {
+            1
+        }
+    }
+}
+
+/// Why a stack fan-out was aborted before any mutation was sent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum FanOutError {
+    /// `fetch_stack` was refused: the API key lacks `stack.read`.
+    MissingStackPermission,
+    /// Any other `fetch_stack` failure.
+    Failed(String),
+}
+
+/// Shown when a stack could not be expanded for lack of `stack.read`.
+const STACK_PERMISSION_MESSAGE: &str =
+    "Archiving/deleting a stack requires the `stack.read` API permission.";
+
+/// Every member id of a fetched stack, Primary first, without duplicates.
+fn stack_member_ids(stack: &StackResponse) -> Vec<String> {
+    let mut ids = vec![stack.primary_asset_id.clone()];
+    for asset in &stack.assets {
+        if !ids.contains(&asset.id) {
+            ids.push(asset.id.clone());
+        }
+    }
+    ids
+}
+
+/// Combine the targets' own ids with the fetched members of their stacks.
+///
+/// No partial action: if *any* stack failed to resolve, nothing is returned.
+/// A missing permission outranks other failures because the user can act on it.
+fn combine_fan_out(
+    own_ids: Vec<String>,
+    stacks: Vec<Result<Vec<String>, String>>,
+) -> Result<Vec<String>, FanOutError> {
+    let mut failure: Option<FanOutError> = None;
+    let mut ids = own_ids;
+    for stack in stacks {
+        match stack {
+            Ok(members) => {
+                for id in members {
+                    if !ids.contains(&id) {
+                        ids.push(id);
+                    }
+                }
+            }
+            Err(err) if is_forbidden(&err) => return Err(FanOutError::MissingStackPermission),
+            Err(err) => {
+                failure.get_or_insert(FanOutError::Failed(err));
+            }
+        }
+    }
+    match failure {
+        Some(err) => Err(err),
+        None => Ok(ids),
+    }
+}
+
+/// Server ids that archive/delete of `targets` must touch: each target itself plus,
+/// for Stack tiles, every other stack member (resolved with `fetch_stack` first, so
+/// a failure aborts before anything is changed).
+pub(super) async fn expand_stack_targets(
+    ui: &LibraryWindowUi,
+    targets: &[TrashTarget],
+) -> Result<Vec<String>, FanOutError> {
+    /// Concurrent `GET /stacks/{id}` requests.
+    const STACK_CONCURRENCY: usize = 6;
+
+    let own_ids: Vec<String> = targets.iter().map(|t| t.remote_id.clone()).collect();
+    let mut stack_ids: Vec<&str> = targets
+        .iter()
+        .filter(|t| t.is_stack())
+        .map(|t| t.stack_id.as_str())
+        .collect();
+    stack_ids.sort_unstable();
+    stack_ids.dedup();
+    if stack_ids.is_empty() {
+        return Ok(own_ids);
+    }
+    let fetched: Vec<Result<Vec<String>, String>> = futures_util::stream::iter(stack_ids)
+        .map(|stack_id| async move {
+            ui.ctx
+                .api_client
+                .fetch_stack(stack_id)
+                .await
+                .map(|stack| stack_member_ids(&stack))
+        })
+        .buffer_unordered(STACK_CONCURRENCY)
+        .collect()
+        .await;
+    combine_fan_out(own_ids, fetched)
+}
+
+/// Tell the user why a stack fan-out was aborted. `generic_heading` titles any
+/// non-permission failure.
+pub(super) fn report_fan_out_error(ui: &LibraryWindowUi, err: &FanOutError, generic_heading: &str) {
+    match err {
+        FanOutError::MissingStackPermission => super::context_menu::show_alert_dialog(
+            ui,
+            "Missing API Permissions",
+            STACK_PERMISSION_MESSAGE,
+        ),
+        FanOutError::Failed(err) => {
+            log::error!("Could not resolve stack members: {err}");
+            super::context_menu::show_alert_dialog(
+                ui,
+                generic_heading,
+                &format!("Could not look up the stack's photos: {err}"),
+            );
+        }
+    }
+}
+
+/// " (including 2 stacks, 9 files total)" for a bulk heading, or empty when no
+/// target is a stack.
+fn stack_scope(targets: &[TrashTarget]) -> String {
+    let stacks = targets.iter().filter(|t| t.is_stack()).count();
+    if stacks == 0 {
+        return String::new();
+    }
+    let files: u32 = targets.iter().map(TrashTarget::file_count).sum();
+    let noun = if stacks == 1 { "stack" } else { "stacks" };
+    format!(" (including {stacks} {noun}, {files} files total)")
 }
 
 /// Heading and body for the trash confirmation dialog.
@@ -265,15 +425,22 @@ fn trash_dialog_text(
 ) -> (String, String) {
     // Trash works on IDs only, so thin (unhydrated) Main library tiles have no
     // filename to quote.
-    let heading = match (targets, trash) {
-        ([single], true) if single.filename.is_empty() => "Move this item to trash?".to_string(),
-        ([single], true) => format!("Move “{}” to trash?", single.filename),
-        (_, true) => format!("Move {} items to trash?", targets.len()),
-        ([single], false) if single.filename.is_empty() => {
-            "Delete this item permanently?".to_string()
+    let (verb, suffix) = if trash {
+        ("Move", "to trash")
+    } else {
+        ("Delete", "permanently")
+    };
+    let heading = match targets {
+        [single] if single.is_stack() => {
+            format!("{verb} stack of {} {suffix}?", single.file_count())
         }
-        ([single], false) => format!("Delete “{}” permanently?", single.filename),
-        (_, false) => format!("Delete {} items permanently?", targets.len()),
+        [single] if single.filename.is_empty() => format!("{verb} this item {suffix}?"),
+        [single] => format!("{verb} “{}” {suffix}?", single.filename),
+        _ => format!(
+            "{verb} {} items{} {suffix}?",
+            targets.len(),
+            stack_scope(targets)
+        ),
     };
     let mut body = if trash {
         "Items can be restored from the Immich trash.".to_string()
@@ -292,20 +459,33 @@ fn trash_dialog_text(
     (heading, body)
 }
 
-/// Ask before moving `targets` to the Immich trash; `on_trashed` runs after the server confirms.
+/// Ask before moving `targets` to the Immich trash; `on_trashed` runs after the server
+/// confirms. Grid semantics: a Stack tile trashes every member (fan-out).
 pub(super) fn confirm_trash(
     ui: Rc<LibraryWindowUi>,
     targets: Vec<TrashTarget>,
     skipped_local: usize,
     on_trashed: impl Fn() + 'static,
 ) {
-    confirm_trash_with(ui, targets, skipped_local, true, on_trashed);
+    confirm_trash_inner(ui, targets, skipped_local, true, on_trashed);
 }
 
-/// [`confirm_trash`] that can leave the grid untouched (`remove_from_grid` false).
-/// The lightbox uses that for stack members: a member is not a grid tile, and
-/// dropping the Primary's tile would shift the positions under the open viewer.
+/// [`confirm_trash`] for the lightbox: targets the displayed member only — never
+/// the whole stack — and can leave the grid untouched (`remove_from_grid` false),
+/// since a stack member is not a grid tile and dropping the Primary's tile would
+/// shift the positions under the open viewer.
 pub(super) fn confirm_trash_with(
+    ui: Rc<LibraryWindowUi>,
+    targets: Vec<TrashTarget>,
+    skipped_local: usize,
+    remove_from_grid: bool,
+    on_trashed: impl Fn() + 'static,
+) {
+    let targets: Vec<TrashTarget> = targets.into_iter().map(TrashTarget::member_only).collect();
+    confirm_trash_inner(ui, targets, skipped_local, remove_from_grid, on_trashed);
+}
+
+fn confirm_trash_inner(
     ui: Rc<LibraryWindowUi>,
     targets: Vec<TrashTarget>,
     skipped_local: usize,
@@ -327,7 +507,7 @@ pub(super) fn confirm_trash_with(
     dialog.set_default_response(Some("cancel"));
     dialog.set_close_response("cancel");
 
-    let ids: Vec<String> = targets.into_iter().map(|t| t.remote_id).collect();
+    let targets = Rc::new(targets);
     let on_trashed = Rc::new(on_trashed);
     let ui_for_choice = ui.clone();
     dialog.connect_response(None, move |_, response| {
@@ -335,9 +515,17 @@ pub(super) fn confirm_trash_with(
             return;
         }
         let ui = ui_for_choice.clone();
-        let ids = ids.clone();
+        let targets = targets.clone();
         let on_trashed = on_trashed.clone();
         glib::MainContext::default().spawn_local(async move {
+            // Resolve every stack before trashing anything: no partial action.
+            let ids = match expand_stack_targets(&ui, &targets).await {
+                Ok(ids) => ids,
+                Err(err) => {
+                    report_fan_out_error(&ui, &err, "Could Not Move to Trash");
+                    return;
+                }
+            };
             match trash_assets(&ui, &ids, remove_from_grid).await {
                 Ok(()) => on_trashed(),
                 Err(err) => {
@@ -399,7 +587,8 @@ fn confirm_and_bulk_delete(ui: Rc<LibraryWindowUi>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{TrashTarget, trash_dialog_text};
+    use super::{FanOutError, TrashTarget, combine_fan_out, stack_member_ids, trash_dialog_text};
+    use crate::api_client::{STACK_FORBIDDEN, StackResponse};
     use crate::library::LOCAL_ID_PREFIX;
     use crate::library::asset_object::{AssetInit, AssetObject};
     use glib::prelude::ObjectExt;
@@ -455,6 +644,8 @@ mod tests {
             remote_id: format!("id-{name}"),
             filename: name.to_string(),
             has_local_copy,
+            stack_id: String::new(),
+            stack_count: 0,
         }
     }
 
@@ -487,5 +678,160 @@ mod tests {
         let (heading, body) = trash_dialog_text(&[target("IMG_1.jpg", false)], 0, false);
         assert_eq!(heading, "Delete “IMG_1.jpg” permanently?");
         assert!(body.contains("can't be undone"));
+    }
+
+    fn stack_target(name: &str, count: u32) -> TrashTarget {
+        TrashTarget {
+            stack_id: format!("stack-{name}"),
+            stack_count: count,
+            ..target(name, false)
+        }
+    }
+
+    fn stack_item(id: &str, count: u32) -> AssetObject {
+        let item = remote_item(id);
+        item.set_property("stack-id", format!("stack-{id}"));
+        item.set_property("stack-count", count);
+        item
+    }
+
+    #[test]
+    fn stack_tile_target_carries_its_stack() {
+        let target = TrashTarget::from_item(&stack_item("primary-1", 4)).expect("server asset");
+        // Favorite/download/copy use `remote_id`: still the Primary, not a member list.
+        assert_eq!(target.remote_id(), "primary-1");
+        assert!(target.is_stack());
+        assert_eq!(target.file_count(), 4);
+    }
+
+    #[test]
+    fn plain_tile_is_not_a_stack_target() {
+        let target = TrashTarget::from_item(&remote_item("a")).expect("server asset");
+        assert!(!target.is_stack());
+        assert_eq!(target.file_count(), 1);
+    }
+
+    #[test]
+    fn single_stack_heading_names_the_member_count() {
+        let (heading, _) = trash_dialog_text(&[stack_target("a", 4)], 0, true);
+        assert_eq!(heading, "Move stack of 4 to trash?");
+        let (heading, _) = trash_dialog_text(&[stack_target("a", 4)], 0, false);
+        assert_eq!(heading, "Delete stack of 4 permanently?");
+    }
+
+    #[test]
+    fn mixed_selection_heading_discloses_stacks_and_total_files() {
+        let mut targets: Vec<TrashTarget> =
+            (0..5).map(|i| target(&format!("p{i}"), false)).collect();
+        targets.push(stack_target("s1", 5));
+        targets.push(stack_target("s2", 6));
+        let (heading, _) = trash_dialog_text(&targets, 0, true);
+        assert_eq!(
+            heading,
+            "Move 7 items (including 2 stacks, 16 files total) to trash?"
+        );
+        let (heading, _) = trash_dialog_text(&targets, 0, false);
+        assert_eq!(
+            heading,
+            "Delete 7 items (including 2 stacks, 16 files total) permanently?"
+        );
+    }
+
+    #[test]
+    fn one_stack_among_many_uses_the_singular() {
+        let targets = [target("a", false), stack_target("s", 3)];
+        let (heading, _) = trash_dialog_text(&targets, 0, true);
+        assert_eq!(
+            heading,
+            "Move 2 items (including 1 stack, 4 files total) to trash?"
+        );
+    }
+
+    #[test]
+    fn selections_without_stacks_keep_the_plain_heading() {
+        let targets = [target("a", false), target("b", false)];
+        let (heading, _) = trash_dialog_text(&targets, 0, true);
+        assert_eq!(heading, "Move 2 items to trash?");
+    }
+
+    fn stack_response(primary: &str, members: &[&str]) -> StackResponse {
+        let assets: Vec<serde_json::Value> = members
+            .iter()
+            .map(|id| {
+                serde_json::json!({
+                    "id": id,
+                    "originalFileName": "x.jpg",
+                    "originalMimeType": "image/jpeg",
+                    "fileCreatedAt": "2024-01-15T14:25:15.000Z",
+                    "type": "IMAGE"
+                })
+            })
+            .collect();
+        serde_json::from_value(serde_json::json!({
+            "id": "s",
+            "primaryAssetId": primary,
+            "assets": assets
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn stack_members_list_primary_first_without_duplicates() {
+        let stack = stack_response("b", &["a", "b", "c"]);
+        assert_eq!(stack_member_ids(&stack), ["b", "a", "c"]);
+    }
+
+    fn ids(list: &[&str]) -> Vec<String> {
+        list.iter().map(|id| id.to_string()).collect()
+    }
+
+    #[test]
+    fn fan_out_adds_members_to_the_targets_own_ids() {
+        let result = combine_fan_out(
+            ids(&["solo", "p1"]),
+            vec![Ok(ids(&["p1", "m1", "m2"])), Ok(ids(&["p2", "m3"]))],
+        );
+        assert_eq!(result, Ok(ids(&["solo", "p1", "m1", "m2", "p2", "m3"])));
+    }
+
+    #[test]
+    fn fan_out_without_stacks_is_just_the_targets() {
+        assert_eq!(
+            combine_fan_out(ids(&["a", "b"]), vec![]),
+            Ok(ids(&["a", "b"]))
+        );
+    }
+
+    #[test]
+    fn fan_out_aborts_on_403_even_if_other_stacks_resolved() {
+        let result = combine_fan_out(
+            ids(&["p1", "p2"]),
+            vec![Ok(ids(&["p1", "m1"])), Err(STACK_FORBIDDEN.to_string())],
+        );
+        assert_eq!(result, Err(FanOutError::MissingStackPermission));
+    }
+
+    #[test]
+    fn fan_out_aborts_on_other_failures_with_the_error() {
+        let result = combine_fan_out(
+            ids(&["p1", "p2"]),
+            vec![
+                Err("HTTP 500 Internal Server Error".to_string()),
+                Ok(ids(&["p2"])),
+            ],
+        );
+        assert_eq!(
+            result,
+            Err(FanOutError::Failed("HTTP 500 Internal Server Error".into()))
+        );
+    }
+
+    #[test]
+    fn missing_permission_outranks_other_failures() {
+        let result = combine_fan_out(
+            ids(&["p1", "p2"]),
+            vec![Err("timeout".to_string()), Err(STACK_FORBIDDEN.to_string())],
+        );
+        assert_eq!(result, Err(FanOutError::MissingStackPermission));
     }
 }

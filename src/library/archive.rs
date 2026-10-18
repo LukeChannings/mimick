@@ -6,7 +6,9 @@ use crate::api_client::LibraryAsset;
 use crate::library::asset_object::AssetObject;
 
 use super::LibraryWindowUi;
-use super::actions::{TrashTarget, remove_assets_from_grid};
+use super::actions::{
+    TrashTarget, expand_stack_targets, remove_assets_from_grid, report_fan_out_error,
+};
 use super::context_menu::show_alert_dialog;
 use super::state::LibrarySource;
 
@@ -36,12 +38,13 @@ pub(super) fn set_archived(
     archived: bool,
     on_done: impl Fn(bool) + 'static,
 ) {
-    set_archived_with(ui, items, archived, true, on_done);
+    let targets: Vec<TrashTarget> = items.iter().filter_map(TrashTarget::from_item).collect();
+    set_archived_targets(ui, items, targets, archived, true, on_done);
 }
 
-/// [`set_archived`] that can leave the grid untouched (`remove_from_grid` false):
-/// `on_done` still learns whether the asset left the current view. Used by the
-/// lightbox for stack members, which are not grid tiles.
+/// [`set_archived`] for the lightbox: targets the displayed member only — never the
+/// whole stack — and can leave the grid untouched (`remove_from_grid` false). `on_done`
+/// still learns whether the asset left the current view.
 pub(super) fn set_archived_with(
     ui: &Rc<LibraryWindowUi>,
     items: Vec<AssetObject>,
@@ -49,16 +52,36 @@ pub(super) fn set_archived_with(
     remove_from_grid: bool,
     on_done: impl Fn(bool) + 'static,
 ) {
-    let ids: Vec<String> = items
+    let targets: Vec<TrashTarget> = items
         .iter()
         .filter_map(TrashTarget::from_item)
-        .map(|target| target.remote_id().to_string())
+        .map(TrashTarget::member_only)
         .collect();
-    if ids.is_empty() {
+    set_archived_targets(ui, items, targets, archived, remove_from_grid, on_done);
+}
+
+fn set_archived_targets(
+    ui: &Rc<LibraryWindowUi>,
+    items: Vec<AssetObject>,
+    targets: Vec<TrashTarget>,
+    archived: bool,
+    remove_from_grid: bool,
+    on_done: impl Fn(bool) + 'static,
+) {
+    if targets.is_empty() {
         return;
     }
     let ui = ui.clone();
     glib::MainContext::default().spawn_local(async move {
+        // A Stack tile archives every member: resolve all stacks first so a failure
+        // (e.g. no `stack.read`) aborts before anything is changed.
+        let ids = match expand_stack_targets(&ui, &targets).await {
+            Ok(ids) => ids,
+            Err(err) => {
+                report_fan_out_error(&ui, &err, archive_failure_heading(archived));
+                return;
+            }
+        };
         let visibility = if archived { "archive" } else { "timeline" };
         if let Err(err) = ui
             .ctx
@@ -66,12 +89,7 @@ pub(super) fn set_archived_with(
             .set_assets_visibility(&ids, visibility)
             .await
         {
-            let heading = if archived {
-                "Could Not Archive"
-            } else {
-                "Could Not Unarchive"
-            };
-            show_alert_dialog(&ui, heading, &err);
+            show_alert_dialog(&ui, archive_failure_heading(archived), &err);
             return;
         }
         for item in &items {
@@ -87,6 +105,14 @@ pub(super) fn set_archived_with(
         }
         on_done(removed);
     });
+}
+
+fn archive_failure_heading(archived: bool) -> &'static str {
+    if archived {
+        "Could Not Archive"
+    } else {
+        "Could Not Unarchive"
+    }
 }
 
 pub(super) fn sync_bulk_button(button: &gtk::Button, source: &LibrarySource) {
