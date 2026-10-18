@@ -74,3 +74,7 @@ scripts/sstool.py
 .github/instructions/codacy.instructions.md
 /.codacy
 tests/fixtures/web_assets
+# Nix
+/result
+/result-*
+.direnv
