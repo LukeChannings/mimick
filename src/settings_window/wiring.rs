@@ -110,7 +110,7 @@ fn add_page(stack: &adw::ViewStack, name: &str, title: &str, icon: &str) -> adw:
 pub(super) fn add_welcome_group(settings_page: &adw::PreferencesPage) {
     let welcome_group = adw::PreferencesGroup::builder()
         .title("Welcome to Mimick!")
-        .description("Start by adding your API key, testing the connection, and choosing at least one folder. The key needs Asset (read, view, upload, update, download, delete), Album (read, create, update), and albumAsset (create, delete) permissions.")
+        .description("Start by adding your API key, testing the connection, and choosing at least one folder. The key needs Asset (read, view, upload, update, download, delete), Album (read, create, update), and albumAsset (create, delete) permissions. Optionally add stack.read to view stack contents in the library and to archive or delete whole stacks.")
         .build();
     let help_row = adw::ActionRow::builder()
         .title("How to get an API Key")
@@ -129,8 +129,13 @@ pub(super) fn add_welcome_group(settings_page: &adw::PreferencesPage) {
     settings_page.add(&welcome_group);
 }
 
-/// Alert heading and body for a connection test result.
-fn connection_report(internal_ok: bool, external_ok: bool) -> (&'static str, String) {
+/// Alert heading and body for a connection test result. `permission_note` is the optional
+/// missing-permission warning; it is appended, never replacing the success feedback.
+fn connection_report(
+    internal_ok: bool,
+    external_ok: bool,
+    permission_note: Option<&str>,
+) -> (&'static str, String) {
     if !internal_ok && !external_ok {
         return (
             "Connection Failed",
@@ -139,15 +144,24 @@ fn connection_report(internal_ok: bool, external_ok: bool) -> (&'static str, Str
     }
     let label = |ok: bool| if ok { "OK" } else { "FAILED" };
     let mode = if internal_ok { "LAN" } else { "WAN" };
-    (
-        "Connection Successful",
-        format!(
-            "Internal: {}\nExternal: {}\n\nActive Mode: {}",
-            label(internal_ok),
-            label(external_ok),
-            mode
-        ),
-    )
+    let mut report = format!(
+        "Internal: {}\nExternal: {}\n\nActive Mode: {}",
+        label(internal_ok),
+        label(external_ok),
+        mode
+    );
+    if let Some(note) = permission_note {
+        report.push_str("\n\nConnection OK \u{2014} ");
+        report.push_str(note);
+    }
+    ("Connection Successful", report)
+}
+
+/// Result of a Test Connection run: which addresses answered, plus any permission warning.
+struct ConnectionTest {
+    internal_ok: bool,
+    external_ok: bool,
+    permission_note: Option<String>,
 }
 
 /// Ping the enabled addresses off the GTK thread and report the result.
@@ -166,6 +180,8 @@ pub(super) fn connect_test_button(
         conn.internal_entry,
         #[weak(rename_to = external_entry)]
         conn.external_entry,
+        #[weak(rename_to = api_key_entry)]
+        conn.api_key_entry,
         move |btn| {
             btn.set_sensitive(false);
             // Collect only plain values: no GTK types cross into the Tokio task.
@@ -178,15 +194,20 @@ pub(super) fn connect_test_button(
             };
             let internal = enabled_url(&internal_switch, &internal_entry);
             let external = enabled_url(&external_switch, &external_entry);
-            let rx = spawn_ping(api_client.clone(), internal, external);
+            let api_key = api_key_entry.text().to_string();
+            let rx = spawn_connection_test(api_client.clone(), internal, external, api_key);
             let (window, btn) = (window.clone(), btn.clone());
             glib::MainContext::default().spawn_local(async move {
-                let Ok((int_ok, ext_ok)) = rx.await else {
+                let Ok(test) = rx.await else {
                     return;
                 };
                 btn.set_sensitive(true);
                 if let Some(window) = window.upgrade() {
-                    let (heading, report) = connection_report(int_ok, ext_ok);
+                    let (heading, report) = connection_report(
+                        test.internal_ok,
+                        test.external_ok,
+                        test.permission_note.as_deref(),
+                    );
                     show_alert(&window, heading, &report);
                 }
             });
@@ -194,23 +215,42 @@ pub(super) fn connect_test_button(
     ));
 }
 
-/// Ping both addresses on Tokio; resolves to `(internal_ok, external_ok)`.
-/// Reuses the app-wide API client: a new one per click opens a connection pool
-/// that lingers ~30s after the test completes.
-fn spawn_ping(
+/// Ping both addresses on Tokio, then probe optional key permissions against the first
+/// reachable one. Reuses the app-wide API client: a new one per click opens a connection
+/// pool that lingers ~30s after the test completes.
+fn spawn_connection_test(
     api_client: Arc<crate::api_client::ImmichApiClient>,
     internal: String,
     external: String,
-) -> tokio::sync::oneshot::Receiver<(bool, bool)> {
+    api_key: String,
+) -> tokio::sync::oneshot::Receiver<ConnectionTest> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {
         let ping = |url: String| {
             let client = api_client.clone();
             async move { !url.is_empty() && client.ping_url(&url).await }
         };
-        let int_ok = ping(internal).await;
-        let ext_ok = ping(external).await;
-        let _ = tx.send((int_ok, ext_ok));
+        let internal_ok = ping(internal.clone()).await;
+        let external_ok = ping(external.clone()).await;
+        let reachable = if internal_ok {
+            Some(internal)
+        } else if external_ok {
+            Some(external)
+        } else {
+            None
+        };
+        let permission_note = match reachable {
+            Some(url) if !api_key.is_empty() => {
+                let results = api_client.probe_permissions_at(&url, &api_key).await;
+                super::connectivity::permission_warning(&results)
+            }
+            _ => None,
+        };
+        let _ = tx.send(ConnectionTest {
+            internal_ok,
+            external_ok,
+            permission_note,
+        });
     });
     rx
 }
@@ -713,15 +753,26 @@ mod tests {
 
     #[test]
     fn connection_report_names_the_active_route() {
-        let (heading, body) = connection_report(true, false);
+        let (heading, body) = connection_report(true, false, None);
         assert_eq!(heading, "Connection Successful");
         assert_eq!(body, "Internal: OK\nExternal: FAILED\n\nActive Mode: LAN");
         assert!(
-            connection_report(false, true)
+            connection_report(false, true, None)
                 .1
                 .ends_with("Active Mode: WAN")
         );
-        assert_eq!(connection_report(false, false).0, "Connection Failed");
+        assert_eq!(connection_report(false, false, None).0, "Connection Failed");
+    }
+
+    #[test]
+    fn connection_report_appends_permission_note() {
+        let (heading, body) =
+            connection_report(true, true, Some("Note: the key lacks `stack.read`."));
+        assert_eq!(heading, "Connection Successful");
+        assert!(body.contains("Active Mode: LAN"));
+        assert!(body.ends_with("Connection OK \u{2014} Note: the key lacks `stack.read`."));
+        // A failed connection never claims "Connection OK".
+        assert!(!connection_report(false, false, Some("x")).1.contains("OK"));
     }
 
     #[test]

@@ -1,8 +1,7 @@
 //! Stacks: fetch a stack's members and probe whether the API key may read stacks.
 //!
 //! Immich exposes no endpoint listing an API key's permissions, so `stack.read`
-//! is validated by probing (see `probe_permissions`). Consumed by later phases;
-//! nothing in the UI calls this yet.
+//! is validated by probing (see `probe_permissions`); the settings window runs it.
 #![allow(dead_code)]
 
 use std::collections::hash_map::RandomState;
@@ -143,31 +142,49 @@ impl ImmichApiClient {
         }
     }
 
-    /// Probe each known optional API-key permission. Never records an `ApiIssue`.
+    /// Probe each known optional API-key permission using the saved connection.
+    /// Never records an `ApiIssue`.
     pub async fn probe_permissions(&self) -> Vec<PermissionProbeResult> {
+        match self.get_active_url().await {
+            Some(base_url) => {
+                let api_key = self.settings_snapshot().api_key;
+                self.probe_permissions_at(&base_url, &api_key).await
+            }
+            None => PERMISSION_PROBES
+                .iter()
+                .map(|probe| PermissionProbeResult {
+                    permission: probe.permission,
+                    feature_hint: probe.feature_hint,
+                    state: PermissionState::Unknown,
+                })
+                .collect(),
+        }
+    }
+
+    /// Probe each known optional API-key permission against an explicit server and key
+    /// (Test Connection, where the form values are not saved yet).
+    pub async fn probe_permissions_at(
+        &self,
+        base_url: &str,
+        api_key: &str,
+    ) -> Vec<PermissionProbeResult> {
         let mut results = Vec::with_capacity(PERMISSION_PROBES.len());
         for probe in PERMISSION_PROBES {
-            let state = self
-                .probe_status(&probe.path.replace("{uuid}", &random_uuid_v4()))
-                .await;
+            let path = probe.path.replace("{uuid}", &random_uuid_v4());
             results.push(PermissionProbeResult {
                 permission: probe.permission,
                 feature_hint: probe.feature_hint,
-                state,
+                state: self.probe_status(base_url, api_key, &path).await,
             });
         }
         results
     }
 
-    async fn probe_status(&self, path: &str) -> PermissionState {
-        let Some(base_url) = self.get_active_url().await else {
-            return PermissionState::Unknown;
-        };
-        let settings = self.settings_snapshot();
+    async fn probe_status(&self, base_url: &str, api_key: &str, path: &str) -> PermissionState {
         let status = self
             .client
-            .get(format!("{}{}", base_url, path))
-            .header("x-api-key", &settings.api_key)
+            .get(format!("{}{}", base_url.trim_end_matches('/'), path))
+            .header("x-api-key", api_key)
             .header("Accept", "application/json")
             .timeout(Duration::from_secs(10))
             .send()

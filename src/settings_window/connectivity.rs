@@ -122,3 +122,45 @@ fn add_connectivity_breakpoint(
     breakpoint.add_setter(api_key_entry, "width-request", Some(&140i32.to_value()));
     window.add_breakpoint(breakpoint);
 }
+
+/// Warning text for optional API-key permissions the probe found missing, or `None` when
+/// nothing is missing. `Unknown` results are ignored: a network blip must not alarm anyone.
+pub fn permission_warning(results: &[crate::api_client::PermissionProbeResult]) -> Option<String> {
+    use crate::api_client::PermissionState;
+    let notes: Vec<String> = results
+        .iter()
+        .filter(|row| row.state == PermissionState::Missing)
+        .map(|row| format!("the key lacks `{}`. {}", row.permission, row.feature_hint))
+        .collect();
+    if notes.is_empty() {
+        None
+    } else {
+        Some(format!("Note: {}", notes.join("\n\nNote: ")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api_client::{PermissionProbeResult, PermissionState};
+
+    fn row(state: PermissionState) -> PermissionProbeResult {
+        PermissionProbeResult {
+            permission: "stack.read",
+            feature_hint: "Stacks will be limited.",
+            state,
+        }
+    }
+
+    #[test]
+    fn warns_only_for_missing_permissions() {
+        assert_eq!(permission_warning(&[]), None);
+        assert_eq!(permission_warning(&[row(PermissionState::Granted)]), None);
+        assert_eq!(permission_warning(&[row(PermissionState::Unknown)]), None);
+        let warning = permission_warning(&[row(PermissionState::Missing)]).unwrap();
+        assert_eq!(
+            warning,
+            "Note: the key lacks `stack.read`. Stacks will be limited."
+        );
+    }
+}
